@@ -47,6 +47,7 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
 </head>
 <body>
 <header><h1>照片打印 · 6寸</h1><p>手机选照片，自动排两张一张 6寸 相纸</p></header>
+<div style="text-align:center;font-size:10px;color:#9aa1ab;margin:-4px 0 8px">手机版 v20261122</div>
 
 <div class="card">
   <h2>照片</h2>
@@ -181,7 +182,7 @@ async function addPhotos(files){
     await new Promise(res=>{
       const url = URL.createObjectURL(f);
       const img = new Image();
-      img.onload = ()=>{ S.photos.push({id:crypto.randomUUID(), name:f.name, img, exif}); res(); };
+      img.onload = ()=>{ S.photos.push({id:(crypto.randomUUID ? crypto.randomUUID() : "p"+Date.now()+"-"+Math.random().toString(36).slice(2,8)), name:f.name, img, exif}); res(); };
       img.onerror = ()=>{ setStatus("err", "无法解码：" + f.name); res(); };
       img.src = url;
     });
@@ -332,7 +333,7 @@ function render(){
 /* ================= PDF 生成 ================= */
 function num(v){ return String(Math.round(v*100)/100); }
 function bytesToB64(bytes){
-  let bin = ""; const CH = 0x8000;
+  let bin = ""; const CH = 0x2000;
   for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i+CH));
   return btoa(bin);
 }
