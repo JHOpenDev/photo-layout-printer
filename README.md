@@ -24,7 +24,7 @@ A local photo-layout & printing studio for macOS: auto-fit two 3-inch photos on 
 
 ```bash
 # macOS 自带 Python 3，无需安装任何依赖
-git clone https://github.com/jianhaiyu-dot/photo-layout-printer.git
+git clone https://github.com/JHOpenDev/photo-layout-printer.git
 cd photo-layout-printer
 python3 server.py          # 或双击 启动.command（自动打开页面，关窗即停）
 ```
