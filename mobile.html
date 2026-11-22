@@ -72,8 +72,7 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
     <button class="btn red" id="cancelAll" style="margin:0;flex:none">一键取消全部</button>
   </div>
   <div id="queueBox"></div>
-  <button class="btn" id="btnPrint">🖨 直接打印</button>
-  <button class="btn gray" id="btnDownload">⬇ 下载 PDF</button>
+  <button class="btn" id="btnPrint">打印</button>
   <div id="status"></div>
 </div>
 
@@ -493,7 +492,6 @@ function bindUI(){
     setStatus("ok", "✔ 已取消全部任务"); loadQueue();
   };
   $("btnPrint").onclick = doPrint;
-  $("btnDownload").onclick = doDownload;
   window.addEventListener("resize", render);
 }
 function setStatus(cls, msg){ const el = $("status"); el.className = cls; el.textContent = msg; }
