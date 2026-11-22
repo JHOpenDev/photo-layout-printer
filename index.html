@@ -467,10 +467,10 @@ function updateSummary(L){
 function drawStamp(ctx, x, y, w, h, rot, exif, k, img){
   if (!exif) return;
   const parts = [];
-  if (exif.dt) parts.push('拍摄于 ' + fmtExifDate(exif.dt));
   if (exif.place) parts.push(exif.place);
   else if (exif.lat !== null && exif.lat !== undefined)
     parts.push('北纬 ' + Math.abs(exif.lat).toFixed(4) + '° · 东经 ' + Math.abs(exif.lon).toFixed(4) + '°');
+  if (exif.dt) parts.push('拍摄于 ' + fmtExifDate(exif.dt));
   if (!parts.length) return;
   ctx.save();
   ctx.translate(x + w/2, y + h/2);
