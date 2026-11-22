@@ -35,6 +35,7 @@ select,input[type=number],input[type=text]{width:100%;padding:5px 8px;border:1px
 .ph .meta{flex:1;min-width:0}
 .ph .name{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ph .dim{font-size:11px;color:var(--sub)}
+.ph .exifline{font-size:11px;color:#0e7490;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .stepper{display:flex;align-items:center;gap:0;border:1px solid var(--line);border-radius:7px;overflow:hidden;flex:none}
 .stepper button{width:20px;height:22px;border:none;background:#f5f6f8;cursor:pointer;font-size:13px;line-height:1}
 .stepper span{min-width:34px;text-align:center;font-size:12px}
@@ -139,6 +140,7 @@ select,input[type=number],input[type=text]{width:100%;padding:5px 8px;border:1px
       <div><label class="f">图片填充</label><select id="fillSel"><option value="cover">裁满格子（推荐）</option><option value="contain">完整显示留白边</option></select></div>
       <div><label class="f">裁切线</label><select id="cutSel"><option value="1">显示（虚线）</option><option value="0">不显示</option></select></div>
     </div>
+    <label class="chk"><input type="checkbox" id="stampChk"> 在留白区打印拍摄信息（时间/地点，占纸2/3模式）</label>
     <div class="hintline">「铺满纸面」按第一张照片的宽高比放大格子。边距 0 + 纸张规格选 4x6.Fullbleed（无边框）时照片完全贴边；默认间距 2mm 是留出下刀位置，可自行改为 0。需要严格 3寸 等标准尺寸时选「标准冲印尺寸」。</div>
   </div>
 </aside>
@@ -194,7 +196,7 @@ const S = {
   paper: {w:102, h:152, name:'6寸'},
   photo: {w:55,  h:84,  name:'3寸'},
   orient:'v', rotateMode:'auto', gap:2, margin:0, bleed:0,
-  cut:true, fill:'cover', perSheet:0, sizeMode:'fill', printMode:'layout',
+  cut:true, fill:'cover', perSheet:0, sizeMode:'fill', printMode:'layout', stampInfo:true,
 };
 const $ = id => document.getElementById(id);
 
@@ -202,7 +204,7 @@ const $ = id => document.getElementById(id);
 function save(){ try{ localStorage.setItem('photoPrintSettings', JSON.stringify({
   paper:S.paper, photo:S.photo, orient:S.orient, rotateMode:S.rotateMode, gap:S.gap,
   margin:S.margin, bleed:S.bleed, cut:S.cut, fill:S.fill, perSheet:S.perSheet,
-  sizeMode:S.sizeMode, printMode:S.printMode, sv:2 })); }catch(e){} }
+  sizeMode:S.sizeMode, printMode:S.printMode, stampInfo:S.stampInfo, sv:2 })); }catch(e){} }
 function load(){ try{
   const d = JSON.parse(localStorage.getItem('photoPrintSettings')||'null');
   if(d){
@@ -427,6 +429,20 @@ function render(){
       ctx.beginPath();
       ctx.moveTo(ox, oy+yB); ctx.lineTo(ox+L.paper.w*k, oy+yB);
       ctx.stroke(); ctx.restore();
+      // 留白区打印拍摄信息
+      if (S.stampInfo){
+        const s0 = slots[0], ex = s0.photo && s0.photo.exif;
+        if (ex && (ex.dt || ex.lat !== null && ex.lat !== undefined)){
+          ctx.fillStyle = '#1a1a1a'; ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+          ctx.font = Math.round(4.6*k) + 'px -apple-system, "PingFang SC", sans-serif';
+          const parts = [];
+          if (ex.dt) parts.push('拍摄于 ' + fmtExifDate(ex.dt));
+          if (ex.lat !== null && ex.lat !== undefined)
+            parts.push('北纬 ' + Math.abs(ex.lat).toFixed(4) + '° · 东经 ' + Math.abs(ex.lon).toFixed(4) + '°');
+          let yy = yB + 8*k;
+          for (const t of parts){ ctx.fillText(t, ox + 10*k, yy); yy += 7.5*k; }
+        }
+      }
     } else if (S.cut && S.printMode!=='single6'){
       ctx.save();
       ctx.strokeStyle='#d97706'; ctx.lineWidth=1; ctx.setLineDash([4,3]);
@@ -454,20 +470,94 @@ function updateSummary(L){
 }
 
 /* ================= 照片管理 ================= */
+/* 解析 JPEG EXIF：拍摄时间 + GPS（纯 JS，照片不出本机） */
+function parseExif(bytes){
+  try{
+    let pos = 2, tiff = null;
+    while (pos + 4 <= bytes.length){
+      if (bytes[pos] !== 0xFF) return null;
+      const marker = bytes[pos+1];
+      if (marker === 0xFF){ pos++; continue; }
+      if (marker === 0xD8 || (marker >= 0xD0 && marker <= 0xD9) || marker === 0x01){ pos += 2; continue; }
+      if (marker === 0xDA) return null;                  // 进入图像数据，EXIF 已不存在
+      const len = (bytes[pos+2] << 8) | bytes[pos+3];
+      if (marker === 0xE1 && bytes[pos+4]===0x45 && bytes[pos+5]===0x78 && bytes[pos+6]===0x69 && bytes[pos+7]===0x66 && bytes[pos+8]===0x00){
+        tiff = bytes.subarray(pos+10, pos+2+len);        // 跳过 "Exif\0\0"
+        break;
+      }
+      pos += 2 + len;
+    }
+    if (!tiff || tiff.length < 8) return null;
+    const dv = new DataView(tiff.buffer, tiff.byteOffset, tiff.byteLength);
+    const le = dv.getUint16(0, false) === 0x4949;        // "II" = 小端
+    const u16 = o => dv.getUint16(o, le), u32 = o => dv.getUint32(o, le);
+    function ifdEntries(off){
+      const n = u16(off), e = {};
+      for (let i = 0; i < n; i++){
+        const en = off + 2 + i*12;
+        const t = u16(en), vt = u16(en+2), cnt = u32(en+4);
+        const sz = ({1:1,2:1,3:2,4:4,5:8,7:1,9:4,10:8}[vt]||1) * cnt;
+        let vo = en + 8;
+        if (sz > 4) vo = u32(en+8);   // 值偏移为 TIFF 绝对地址
+        e[t] = {vt, cnt, vo};
+      }
+      return e;
+    }
+    const ifd0 = ifdEntries(u32(4));
+    const exifIfd = ifd0[0x8769] ? ifdEntries(u32(ifd0[0x8769].vo)) : null;
+    let dt = null;
+    if (exifIfd && exifIfd[0x9003]){
+      const en = exifIfd[0x9003];
+      dt = new TextDecoder('latin1').decode(tiff.subarray(en.vo, en.vo + en.cnt)).replace(/\0/g, '').trim();
+    }
+    let lat = null, lon = null;
+    const gpsIfd = ifd0[0x8825] ? ifdEntries(u32(ifd0[0x8825].vo)) : null;
+    if (gpsIfd && gpsIfd[0x0002] && gpsIfd[0x0004]){
+      const rat = en => {
+        const v = [];
+        for (let i = 0; i < en.cnt; i++){
+          const vo = en.vo + i*8;
+          v.push(u32(vo) / (u32(vo+4) || 1));
+        }
+        return v;
+      };
+      const dms2deg = (dms, ref) => {
+        const d = rat(dms);
+        const deg = d[0] + (d[1]||0)/60 + (d[2]||0)/3600;
+        return (ref==='S' || ref==='W') ? -deg : deg;
+      };
+      const latRef = gpsIfd[0x0001] ? String.fromCharCode(tiff[gpsIfd[0x0001].vo]) : 'N';
+      const lonRef = gpsIfd[0x0003] ? String.fromCharCode(tiff[gpsIfd[0x0003].vo]) : 'E';
+      lat = dms2deg(gpsIfd[0x0002], latRef);
+      lon = dms2deg(gpsIfd[0x0004], lonRef);
+    }
+    if (!dt && lat === null) return null;
+    return { dt, lat, lon };
+  }catch(e){ return null; }
+}
+function fmtExifDate(dt){ return (dt||'').slice(0,16).replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3'); }
+function fmtExif(exif){
+  if (!exif) return '';
+  const parts = [];
+  if (exif.dt) parts.push('📅 ' + fmtExifDate(exif.dt));
+  if (exif.lat !== null && exif.lat !== undefined)
+    parts.push('📍 ' + Math.abs(exif.lat).toFixed(4) + '°' + (exif.lat>=0?'N':'S') + ' ' +
+               Math.abs(exif.lon).toFixed(4) + '°' + (exif.lon>=0?'E':'W'));
+  return parts.join(' · ');
+}
 /* 检查图片文件是否完整：JPEG 必须以 FFD9(EOI) 结尾、PNG 必须含 IEND。
    被截断的文件（如微信/QQ传输中断）解码后会出现白色虚影，打印出来就是废片 */
-async function checkFileComplete(f){
+async function checkFileComplete(buf){
   try{
-    const buf = new Uint8Array(await f.arrayBuffer());
     const n = buf.length;
     if (n < 64) return false;
-    if (/jpe?g/i.test(f.type) || /\.jpe?g$/i.test(f.name)){
+    if (buf[0]===0xFF && buf[1]===0xD8){
       for (let i = n-1; i >= Math.max(1, n-16); i--){
         if (buf[i]===0xD9 && buf[i-1]===0xFF) return true;   // 允许末尾少量填充字节
       }
       return false;
     }
-    if (/png/i.test(f.type) || /\.png$/i.test(f.name)){
+    if (buf[0]===0x89 && buf[1]===0x50){                     // PNG
       const tail = new TextDecoder('latin1').decode(buf.subarray(Math.max(0, n-16)));
       return tail.includes('IEND');
     }
@@ -481,11 +571,13 @@ async function addPhotos(files){
   if (!imgs.length) return;
   const bad = [];
   for (const f of imgs){
-    if (!(await checkFileComplete(f))){ bad.push(f.name); continue; }
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    if (!(await checkFileComplete(bytes))){ bad.push(f.name); continue; }
+    const exif = parseExif(bytes);
     await new Promise(res=>{
       const url = URL.createObjectURL(f);
       const img = new Image();
-      img.onload = ()=>{ S.photos.push({id:crypto.randomUUID(), name:f.name, img, copies:1}); res(); };
+      img.onload = ()=>{ S.photos.push({id:crypto.randomUUID(), name:f.name, img, copies:1, exif}); res(); };
       img.onerror = ()=>{ alert('无法解码：'+f.name+'（请用 JPG/PNG）'); res(); };
       img.src = url;
     });
@@ -500,7 +592,8 @@ function refreshList(){
   S.photos.forEach((p, i)=>{
     const d = document.createElement('div'); d.className='ph';
     d.innerHTML = '<img src="'+p.img.src+'"><div class="meta"><div class="name"></div>'+
-      '<div class="dim">'+p.img.naturalWidth+'×'+p.img.naturalHeight+' px</div></div>'+
+      '<div class="dim">'+p.img.naturalWidth+'×'+p.img.naturalHeight+' px</div>'+
+      (fmtExif(p.exif) ? '<div class="exifline">'+fmtExif(p.exif)+'</div>' : '')+'</div>'+
       '<button class="rm" title="移除">✕</button>';
     d.querySelector('.name').textContent = p.name;
     d.querySelector('.rm').onclick = ()=>{ S.photos.splice(i,1); refreshList(); render(); };
@@ -526,6 +619,25 @@ function rasterizeSlot(img, wMM, hMM, rot){
   drawFit(x, img, 0, 0, tw, th, rot, S.fill);
   return new Promise(res=>c.toBlob(b=>res(b), 'image/jpeg', 0.92));
 }
+/* 占纸2/3 留白区的拍摄信息文字板（300dpi 位图，嵌入 PDF） */
+function makeStampCanvas(wMM, hMM, exif){
+  const dpi = 300;
+  const c = document.createElement('canvas');
+  c.width = Math.max(16, Math.round(wMM/25.4*dpi));
+  c.height = Math.max(16, Math.round(hMM/25.4*dpi));
+  const x = c.getContext('2d');
+  x.fillStyle = '#ffffff'; x.fillRect(0, 0, c.width, c.height);
+  x.fillStyle = '#1a1a1a'; x.textBaseline = 'top';
+  x.font = Math.round(5/25.4*dpi) + 'px -apple-system, "PingFang SC", sans-serif';
+  const pad = Math.round(10/25.4*dpi), lh = Math.round(9/25.4*dpi);
+  const parts = [];
+  if (exif.dt) parts.push('拍摄于 ' + fmtExifDate(exif.dt));
+  if (exif.lat !== null && exif.lat !== undefined)
+    parts.push('北纬 ' + Math.abs(exif.lat).toFixed(4) + '° · 东经 ' + Math.abs(exif.lon).toFixed(4) + '°');
+  let y = pad;
+  for (const t of parts){ x.fillText(t, pad, y); y += lh; }
+  return c;
+}
 async function buildPDFBytes(){
   const L = computeAll();
   if (!L) throw new Error('当前尺寸放不进纸张');
@@ -549,6 +661,26 @@ async function buildPDFBytes(){
         keyMap.set(key, idx);
       }
       items.push({s, idx});
+    }
+    // 占纸2/3：留白区渲染拍摄信息（文字以 300dpi 位图嵌入 PDF）
+    if (S.sizeMode==='p23' && S.stampInfo && slots[0] && slots[0].photo && slots[0].photo.exif){
+      const ex = slots[0].photo.exif;
+      if (ex.dt || (ex.lat !== null && ex.lat !== undefined)){
+        const s0 = slots[0];
+        const blank = {x:0, y:s0.y+s0.h, w:L.paper.w, h:L.paper.h-(s0.y+s0.h)};
+        const c = makeStampCanvas(blank.w, blank.h, ex);
+        const blob = await new Promise(r=>c.toBlob(r, 'image/jpeg', 0.92));
+        const buf = new Uint8Array(await blob.arrayBuffer());
+        const tw = Math.max(16, Math.round(blank.w/25.4*300));
+        const th = Math.max(16, Math.round(blank.h/25.4*300));
+        const key = 'stamp#'+slots[0].photo.id+'#'+tw+'x'+th;
+        let idx = keyMap.get(key);
+        if (idx===undefined){
+          idx = images.length; images.push({w:tw, h:th, bytes:buf});
+          keyMap.set(key, idx);
+        }
+        items.push({s: blank, idx});
+      }
     }
     sheetItems.push(items);
   }
@@ -895,6 +1027,8 @@ function syncPrintMode(){
   const single = S.printMode === 'single6';
   for (const id of ['sizeModeSel','rotateChk','perSheetSel','gapIn','marginIn','bleedIn','cutSel','orientSel'])
     $(id).disabled = single;
+  // 拍摄信息只作用于「占纸 2/3」模式的留白区
+  $('stampChk').disabled = !(S.printMode === 'layout' && S.sizeMode === 'p23');
 }
 function bindInputs(){
   const paperSel=$('paperSel'), photoSel=$('photoSel');
@@ -907,6 +1041,7 @@ function bindInputs(){
   $('perSheetSel').value=S.perSheet||'';
   $('gapIn').value=S.gap; $('marginIn').value=S.margin; $('bleedIn').value=S.bleed;
   $('fillSel').value=S.fill; $('cutSel').value=S.cut?'1':'0';
+  $('stampChk').checked = S.stampInfo !== false;
   $('sizeModeSel').value = S.sizeMode || 'fill';
   $('printModeSel').value = S.printMode || 'layout';
   syncSizeMode();
@@ -933,6 +1068,7 @@ function bindInputs(){
   $('bleedIn').oninput = e=>{ S.bleed=Math.max(0,+e.target.value||0); save(); render(); };
   $('fillSel').onchange = e=>{ S.fill=e.target.value; save(); render(); };
   $('cutSel').onchange = e=>{ S.cut=e.target.value==='1'; save(); render(); };
+  $('stampChk').onchange = e=>{ S.stampInfo=e.target.checked; save(); render(); };
 
   const dz = $('dropZone'), fi = $('fileInput');
   dz.onclick = ()=>fi.click();
