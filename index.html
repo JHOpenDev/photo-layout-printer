@@ -469,19 +469,20 @@ function drawStamp(ctx, x, y, w, h, rot, exif, k, img){
   ctx.save();
   ctx.translate(x + w/2, y + h/2);
   if (rot) ctx.rotate(Math.PI/2);
-  // 槽位左上角在旋转坐标系中的位置（文字随内容方向对齐）
-  const cu = rot ? -h/2 : -w/2, cv = rot ? w/2 : -h/2;
+  // 照片右下角在旋转坐标系中的位置（文字随内容方向对齐、右对齐）
+  const bu = rot ? h/2 : w/2, bv = rot ? w/2 : h/2;
   const pad = 2.5*k, fs = Math.min(3.4, w/14, h/14)*k, lh = fs*1.3;
   ctx.font = fs + 'px -apple-system, "PingFang SC", sans-serif';
-  ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+  ctx.textBaseline = 'top'; ctx.textAlign = 'right';
   ctx.lineWidth = Math.max(1, 0.55*k); ctx.strokeStyle = 'rgba(255,255,255,0.92)';
   ctx.lineJoin = 'round';
-  let uy = cu + pad;
+  const vvLast = bv - pad - fs;
+  let vv = vvLast - (parts.length - 1) * lh;
   for (const t of parts){
-    ctx.strokeText(t, cu + pad, uy);
+    ctx.strokeText(t, bu - pad, vv);
     ctx.fillStyle = '#1a1a1a';
-    ctx.fillText(t, cu + pad, uy);
-    uy += lh;
+    ctx.fillText(t, bu - pad, vv);
+    vv += lh;
   }
   ctx.restore();
 }
