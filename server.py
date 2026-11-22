@@ -207,7 +207,7 @@ def geocode_place(lat, lon):
     if key in GEO_CACHE:
         return GEO_CACHE[key]
     q = urllib.parse.urlencode({"format": "jsonv2", "lat": lat, "lon": lon,
-                                "zoom": 17, "accept-language": "zh"})
+                                "zoom": 18, "accept-language": "zh"})
     url = "https://nominatim.openstreetmap.org/reverse?" + q
     req = urllib.request.Request(url, headers={
         "User-Agent": "photo-layout-printer/1.0 (personal local tool)"})
@@ -225,6 +225,9 @@ def geocode_place(lat, lon):
                     return s[:-len(suf)]
             return s
 
+        def zh(s):
+            return bool(s) and bool(re.search(r"[\u4e00-\u9fff]", s))
+
         # 省级：优先 address.state；直辖市（北京/上海等）从 display_name 里找「xx市」
         prov = short(addr.get("state"), ("省", "自治区", "市"))
         if not prov:
@@ -236,15 +239,20 @@ def geocode_place(lat, lon):
                      ("市", "区", "县", "旗"))
         town = short(addr.get("town") or addr.get("suburb") or addr.get("city_district")
                      or addr.get("quarter"), ("镇", "乡", "街道", "社区"))
+        road = addr.get("road") or ""
+        if not re.search(r"[\u4e00-\u9fff]", road):
+            road = ""     # 拉丁路名（如 Dufuchi Hutong）对中文打印没用
         poi = data.get("name") or addr.get("park") or ""
-        if poi and not re.search(r"[\u4e00-\u9fff]", poi):
-            poi = ""     # OSM 里的拉丁名（如 Dufuchi Hutong）对中文打印没用
+        if not zh(poi) or (addr.get("amenity") and not addr.get("building")):
+            poi = ""      # 跳过「麦当劳」式小设施节点与拉丁名——太噪，不可信
         parts = []
         for p in (prov, dist):
             if p and (not parts or parts[-1] != p):
                 parts.append(p)
-        # 第三级：路名/地标名（最精确）优先，没有再退到镇/街道名
-        third = poi if poi else town
+        # 第三级：路名 + 地标/建筑物名（zoom18 能返回 POI），都没有退到镇/街道名
+        third = road or town
+        if poi and poi != road:
+            third = (third + "·" + poi) if third else poi
         if third and (not parts or parts[-1] != third):
             parts.append(third)
         place = "·".join(parts).strip("·")[:60]
