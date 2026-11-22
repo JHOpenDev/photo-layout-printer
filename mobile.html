@@ -22,6 +22,7 @@ h2{font-size:13px;color:var(--sub);margin-bottom:10px;font-weight:600}
 #thumbs img{width:100%;height:100%;object-fit:cover;display:block}
 #thumbs .rm{position:absolute;top:3px;right:3px;width:22px;height:22px;border:none;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:13px;line-height:21px;text-align:center;padding:0}
 #thumbs .exifline{position:absolute;left:0;right:0;bottom:0;font-size:9px;background:rgba(0,0,0,.45);color:#fff;padding:2px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#thumbs .printedTag{position:absolute;left:0;top:0;font-size:9px;background:#16a34a;color:#fff;padding:2px 4px;border-radius:0 0 4px 0}
 canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
 #summary{font-size:13px;color:#374151;margin:10px 0;text-align:center}
 .chk{display:flex;align-items:center;gap:8px;font-size:14px;margin-top:12px}
@@ -171,6 +172,26 @@ function checkFileComplete(buf){
   }
   return true;
 }
+/* 已打印记录：按文件内容指纹识别，防止重复打印 */
+function fnv1a(bytes){
+  let h = 0x811c9dc5;
+  for (let i = 0; i < bytes.length; i++){ h ^= bytes[i]; h = Math.imul(h, 0x01000193) >>> 0; }
+  h ^= bytes.length; h = Math.imul(h, 0x01000193) >>> 0;
+  return ("0000000" + h.toString(16)).slice(-8) + "-" + bytes.length;
+}
+function loadPrinted(){ try{ return JSON.parse(localStorage.getItem("printedHistory") || "{}"); }catch(e){ return {}; } }
+function savePrinted(h){ try{ localStorage.setItem("printedHistory", JSON.stringify(h)); }catch(e){} }
+function markPrinted(list){
+  const h = loadPrinted(), now = new Date();
+  for (const p of list) h[p.hash] = { name: p.name, time: now.toLocaleString("zh-CN") };
+  const keys = Object.keys(h);
+  if (keys.length > 300) for (const k of keys.slice(0, keys.length - 300)) delete h[k];
+  savePrinted(h);
+}
+function printedDup(list){
+  const h = loadPrinted();
+  return list.filter(p => h[p.hash]);
+}
 async function addPhotos(files){
   const imgs = Array.from(files).filter(f=>f.type.startsWith("image/"));
   if (!imgs.length) return;
@@ -182,7 +203,7 @@ async function addPhotos(files){
     await new Promise(res=>{
       const url = URL.createObjectURL(f);
       const img = new Image();
-      img.onload = ()=>{ S.photos.push({id:(crypto.randomUUID ? crypto.randomUUID() : "p"+Date.now()+"-"+Math.random().toString(36).slice(2,8)), name:f.name, img, exif}); res(); };
+      img.onload = ()=>{ S.photos.push({id:(crypto.randomUUID ? crypto.randomUUID() : "p"+Date.now()+"-"+Math.random().toString(36).slice(2,8)), name:f.name, img, exif, hash:fnv1a(bytes), printed:!!loadPrinted()[fnv1a(bytes)]}); res(); };
       img.onerror = ()=>{ setStatus("err", "无法解码：" + f.name); res(); };
       img.src = url;
     });
@@ -422,6 +443,11 @@ function makeTitle(){
 async function doPrint(){
   if (!detected.printer){ setStatus("err", "未检测到打印机"); return; }
   if (!S.photos.length){ setStatus("err", "请先添加照片"); return; }
+  const dup = printedDup(S.photos);
+  if (dup.length){
+    setStatus("err", "⚠️ 以下照片已打印过，不能重复打印：" + dup.map(p=>p.name).join("、") + "（如卡纸需重打，请先在队列面板重置记录）");
+    return;
+  }
   setStatus("", "正在生成 PDF…");
   let blob;
   try{ blob = await buildPDFBytes(); }
@@ -435,7 +461,7 @@ async function doPrint(){
         mediatype_name: "MediaType", quality: true, fit: true, title: makeTitle()})});
     const d = await r.json();
     setStatus(d.ok ? "ok" : "err", (d.ok ? "✔ " : "✕ ") + (d.ok ? "已发送，共 " + S.photos.length + " 张照片" : (d.error||"打印失败")));
-    if (d.ok) loadQueue();
+    if (d.ok){ setStatus("ok", "✔ 已发送，共 " + S.photos.length + " 张照片"); markPrinted(S.photos); S.photos.forEach(p=>p.printed = true); refreshThumbs(); loadQueue(); }
   }catch(e){ setStatus("err", "✕ 发送失败：" + e.message); }
 }
 async function doDownload(){
@@ -465,6 +491,9 @@ async function loadQueue(){
   box.innerHTML = jobs.length
     ? jobs.map(j=>'<div class="job"><span class="n">#'+j.job+' · '+(j.name||'（未记录）')+'</span><button class="c" data-job="'+j.job+'">取消</button></div>').join("")
     : '<div class="empty">✔ 队列是空的</div>';
+  box.innerHTML += '<div style="text-align:right;margin-top:8px"><button class="c" id="resetPrinted" style="color:#6b7280;background:#f0f1f3">重置已打印记录</button></div>';
+  const rp = box.querySelector("#resetPrinted");
+  if (rp) rp.onclick = ()=>{ if (confirm("确定清除本机的已打印记录吗？（清除后同一张照片可以再次打印）")){ localStorage.removeItem("printedHistory"); S.photos.forEach(p=>p.printed = false); refreshThumbs(); loadQueue(); setStatus("ok", "✔ 已打印记录已清空"); } };
   box.querySelectorAll("button[data-job]").forEach(b=> b.onclick = ()=>cancelJob(+b.dataset.job));
 }
 async function cancelJob(job){
@@ -482,6 +511,7 @@ function refreshThumbs(){
   S.photos.forEach((p, i)=>{
     const d = document.createElement("div"); d.className = "t";
     d.innerHTML = '<img src="'+p.img.src+'">' +
+      (p.printed ? '<div class="printedTag">已打印</div>' : '') +
       (fmtExif(p.exif) ? '<div class="exifline">'+fmtExif(p.exif)+'</div>' : '') +
       '<button class="rm">✕</button>';
     d.querySelector(".rm").onclick = ()=>rmPhoto(i);

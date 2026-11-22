@@ -344,19 +344,20 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        if self.path in ("/m", "/mobile", "/mobile.html"):
+        path = urlparse(self.path).path  # 容忍查询串，/m?t=xx 也能命中
+        if path in ("/m", "/mobile", "/mobile.html"):
             try:
                 with open(os.path.join(ROOT, "mobile.html"), "rb") as f:
                     self._send(200, f.read(), "text/html; charset=utf-8")
             except OSError as e:
                 self._send(500, json.dumps({"error": str(e)}).encode())
-        elif self.path in ("/", "/index.html"):
+        elif path in ("/", "/index.html"):
             try:
                 with open(os.path.join(ROOT, "index.html"), "rb") as f:
                     self._send(200, f.read(), "text/html; charset=utf-8")
             except OSError as e:
                 self._send(500, json.dumps({"error": str(e)}).encode())
-        elif self.path == "/api/printers":
+        elif path == "/api/printers":
             self._send(200, json.dumps(list_printers()).encode())
         elif self.path.startswith("/api/geocode"):
             q = parse_qs(urlparse(self.path).query)
