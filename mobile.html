@@ -46,7 +46,7 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
 </style>
 </head>
 <body>
-<header><h1>照片打印 · 6寸</h1><p>手机选照片，自动排两张一张 6寸 相纸</p></header>
+<header><h1>照片打印 · 6寸</h1><p>手机选照片，一张照片打一张 6寸（满幅无边）</p></header>
 <div style="text-align:center;font-size:10px;color:#9aa1ab;margin:-4px 0 8px">手机版 v20261122</div>
 
 <div class="card">
@@ -54,14 +54,14 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
   <div id="dropZone">点这里从相册选照片<br><b>可一次多选 · 每张打 1 份</b></div>
   <input type="file" id="fileInput" accept="image/*" multiple>
   <div id="thumbs"></div>
-  <div class="hint">照片会自动排满 6寸 相纸（贴边、两张一格一纸），多张自动分页。</div>
+  <div class="hint">每张照片单独打一张 6寸（满幅无边）；横版照片自动转正打印，成品即横版 6寸。</div>
 </div>
 
 <div class="card">
   <h2>预览</h2>
   <div id="summary">还没有照片</div>
   <canvas id="cv"></canvas>
-  <label class="chk"><input type="checkbox" id="stampChk" checked> 在照片上打印拍摄信息（时间/地点）</label>
+  
 </div>
 
 <div class="card">
@@ -206,48 +206,21 @@ async function geocodeMissing(){
 }
 function rmPhoto(i){ S.photos.splice(i,1); refreshThumbs(); render(); setStatus("", ""); }
 
-/* ================= 排版引擎（固定 6寸 · 两格贴边） ================= */
+/* ================= 排版（一纸一照满幅） ================= */
 function computeAll(){
-  const P = PAPER, gap = GAP;
-  let a = 1.5;
-  if (S.photos.length){
-    const im = S.photos[0].img;
-    a = (im.naturalWidth||im.width)/(im.naturalHeight||im.height);
-  }
-  if (!isFinite(a) || a <= 0) a = 1.5;
-  // 两种格子形状 × 正放/旋转，取能印得更大的
-  const grids = [
-    {cols:1, rows:2, cw:P.w,      ch:(P.h-gap)/2},
-    {cols:2, rows:1, cw:(P.w-gap)/2, ch:P.h},
-  ];
-  let best = null;
-  for (const g of grids){
-    for (const sa of [a, 1/a]){
-      const w = Math.min(g.cw, g.ch*sa), h = w/sa;
-      if (w < 5 || h < 5) continue;
-      if (!best || w*h > best.area) best = {g, w, h, area:w*h, sa};
-    }
-  }
-  if (!best) return null;
-  const cw = best.g.cw, ch = best.g.ch;
-  const x0 = (P.w - cw)/2, y0 = (P.h - 2*ch - gap)/2;
-  const base = [
-    {x:x0,          y:y0,          w:best.w, h:best.h},
-    {x:x0,          y:y0+ch+gap,   w:best.w, h:best.h},
-  ];
   const q = S.photos;
-  const nsheets = Math.max(1, Math.ceil(Math.max(q.length,1)/2));
-  const sheets = [];
-  for (let i=0;i<nsheets;i++)
-    sheets.push(base.map((sl,j)=>({...sl, photo:q[i*2+j]||null})));
-  return {paper:P, sheets, per:2, used:q.length, slotW:best.w, slotH:best.h, rotC: best.sa !== a};
+  const list = q.length ? q : [null];
+  const sheets = list.map(p=>{
+    const iw = p ? (p.img.naturalWidth||p.img.width) : 3;
+    const ih = p ? (p.img.naturalHeight||p.img.height) : 2;
+    return [{x:0, y:0, w:PAPER.w, h:PAPER.h, photo:p, rotC: iw > ih}];   // 横片在页内旋转
+  });
+  return {paper:PAPER, sheets, per:1, used:q.length, single:true};
 }
-/* 把图片 cover/contain 填进矩形 */
-function drawFit(ctx, img, x, y, w, h, rot, mode){
+/* 把图片 cover 填满矩形 */
+function drawFit(ctx, img, x, y, w, h, rot){
   const iw = img.naturalWidth||img.width, ih = img.naturalHeight||img.height;
-  let sc;
-  if (rot) sc = mode==="cover" ? Math.max(w/ih, h/iw) : Math.min(w/ih, h/iw);
-  else     sc = mode==="cover" ? Math.max(w/iw, h/ih) : Math.min(w/iw, h/ih);
+  const sc = rot ? Math.max(w/ih, h/iw) : Math.max(w/iw, h/ih);
   const a = iw*sc, b = ih*sc;
   ctx.save();
   ctx.translate(x+w/2, y+h/2);
@@ -288,21 +261,22 @@ function drawStamp(ctx, x, y, w, h, rot, exif, k, img){
 function render(){
   const L = computeAll();
   const cv = $("cv");
-  if (!L){ cv.style.display = "none"; $("summary").textContent = "还没有照片"; return; }
-  $("summary").innerHTML = "纸张 <b>"+L.paper.w+"×"+L.paper.h+"mm</b> · 每张 <b>2</b> 格 · 已排 <b>"+L.used+"</b> 张 · 共 <b>"+L.sheets.length+"</b> 张纸";
-  const wrapW = Math.min(document.body.clientWidth - 24, 460);
-  const k = wrapW / (L.paper.w + 12);
-  const pad = 6*k, labelH = 16, gapY = 18;
-  const H = L.paper.h*k + pad*2 + labelH + (L.sheets.length-1)*gapY;
+  const card = cv.parentElement;
+  const contentW = Math.max(200, card.clientWidth - 28);
   const dpr = window.devicePixelRatio || 1;
-  cv.width = Math.round(wrapW*dpr); cv.height = Math.round(H*dpr);
-  cv.style.width = wrapW+"px"; cv.style.height = H+"px";
+  const pad = 6, labelH = 15, gapY = 12;
+  let k = contentW / L.paper.w;
+  let H = L.sheets.length * (L.paper.h*k + labelH + 8) + pad*2 + (L.sheets.length-1)*gapY;
+  const maxDev = 3400;
+  if (H * dpr > maxDev){ const f = maxDev / (H * dpr); k *= f; H *= f; }
+  cv.width = Math.round(contentW*dpr); cv.height = Math.round(H*dpr);
+  cv.style.width = contentW+"px"; cv.style.height = H+"px";
   cv.style.display = "block";
   const ctx = cv.getContext("2d");
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  ctx.clearRect(0,0,wrapW,H);
+  ctx.clearRect(0,0,contentW,H);
   L.sheets.forEach((slots,i)=>{
-    const ox = pad, oy = pad + i*(L.paper.h*k + gapY);
+    const ox = pad, oy = pad + i*(L.paper.h*k + labelH + gapY);
     ctx.fillStyle = "#8a8f99"; ctx.font = "11px -apple-system"; ctx.textAlign = "left";
     ctx.fillText("第 " + (i+1) + " 张", ox, oy - 4);
     ctx.save();
@@ -310,24 +284,15 @@ function render(){
     ctx.fillStyle = "#fff"; ctx.fillRect(ox, oy, L.paper.w*k, L.paper.h*k);
     ctx.restore();
     ctx.strokeStyle = "#d8dbe0"; ctx.strokeRect(ox+.5, oy+.5, L.paper.w*k-1, L.paper.h*k-1);
-    for (const s of slots){
-      const X = ox + s.x*k, Y = oy + s.y*k, W = s.w*k, H2 = s.h*k;
-      if (s.photo){
-        ctx.save(); ctx.beginPath(); ctx.rect(X,Y,W,H2); ctx.clip();
-        const rot = s.rotC;
-        drawFit(ctx, s.photo.img, X, Y, W, H2, rot, S.fill);
-        if (S.stampInfo) drawStamp(ctx, X, Y, W, H2, rot, s.photo.exif, k, s.photo.img);
-        ctx.restore();
-      }
+    const s = slots[0];
+    if (s.photo){
+      ctx.save(); ctx.beginPath(); ctx.rect(ox, oy, L.paper.w*k, L.paper.h*k); ctx.clip();
+      drawFit(ctx, s.photo.img, ox, oy, L.paper.w*k, L.paper.h*k, s.rotC);
+      if (S.stampInfo) drawStamp(ctx, ox, oy, L.paper.w*k, L.paper.h*k, s.rotC, s.photo.exif, k, s.photo.img);
+      ctx.restore();
     }
-    // 两格交界虚线
-    ctx.save();
-    ctx.strokeStyle = "#c9ccd1"; ctx.lineWidth = 1; ctx.setLineDash([5,3]);
-    ctx.beginPath();
-    ctx.moveTo(ox, oy + (slots[0].y + slots[0].h)*k);
-    ctx.lineTo(ox + L.paper.w*k, oy + (slots[0].y + slots[0].h)*k);
-    ctx.stroke(); ctx.restore();
   });
+  $("summary").innerHTML = "一纸一照满幅 · 已排 <b>" + L.used + "</b> 张照片 · 共 <b>" + L.sheets.length + "</b> 张 6寸纸";
 }
 
 /* ================= PDF 生成 ================= */
@@ -521,7 +486,6 @@ function bindUI(){
   fi.onchange = ()=>{ addPhotos(fi.files); fi.value = ""; };
   ["dragover","dragenter"].forEach(ev=>dz.addEventListener(ev, e=>e.preventDefault()));
   dz.addEventListener("drop", e=>{ e.preventDefault(); addPhotos(e.dataTransfer.files); });
-  $("stampChk").onchange = e=>{ S.stampInfo = e.target.checked; render(); };
   $("qBtn").onclick = ()=>{ queueOpen = !queueOpen; loadQueue(); };
   $("cancelAll").onclick = async ()=>{
     try{ await fetch("/api/cancel", {method:"POST", headers:{"Content-Type":"application/json"},
