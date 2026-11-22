@@ -240,19 +240,25 @@ function drawStamp(ctx, x, y, w, h, rot, exif, k, img){
   ctx.save();
   ctx.translate(x + w/2, y + h/2);
   if (rot) ctx.rotate(Math.PI/2);
-  const bu = rot ? h/2 : w/2, bv = rot ? w/2 : h/2;
-  const pad = 2.5*k, fs = Math.min(3.4, w/14, h/14)*k, lh = fs*1.3;
+  // 锚定到图像自身的右下角（本地坐标系内），保证文字永远落在照片里
+  const iw = img.naturalWidth||img.width, ih = img.naturalHeight||img.height;
+  const sc = rot ? Math.max(w/ih, h/iw) : Math.max(w/iw, h/ih);
+  const a = iw*sc, b = ih*sc;                 // 图像在本地坐标系的绘制尺寸
+  const pad = 2.5*k;
+  let fs = Math.min(3.4, w/14, h/14)*k;
+  const maxLen = Math.max(...parts.map(t => t.length));
+  fs = Math.min(fs, (a - 2*pad) / (maxLen * 1.08));   // 最长行放不下时自动缩小字号
+  const lh = fs*1.3;
   ctx.font = fs + 'px -apple-system, "PingFang SC", sans-serif';
   ctx.textBaseline = "top"; ctx.textAlign = "right";
   ctx.lineWidth = Math.max(1, 0.55*k); ctx.strokeStyle = "rgba(255,255,255,0.92)";
   ctx.lineJoin = "round";
-  const vvLast = bv - pad - fs;
-  let vv = vvLast - (parts.length - 1) * lh;
-  for (const t of parts){
-    ctx.strokeText(t, bu - pad, vv);
+  let vv = b/2 - pad - fs;
+  for (let i = parts.length - 1; i >= 0; i--){
+    ctx.strokeText(parts[i], a/2 - pad, vv);
     ctx.fillStyle = "#1a1a1a";
-    ctx.fillText(t, bu - pad, vv);
-    vv += lh;
+    ctx.fillText(parts[i], a/2 - pad, vv);
+    vv -= lh;
   }
   ctx.restore();
 }
