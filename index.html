@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>照片排版打印 · 6寸纸双3寸</title>
+<style>
+:root{--bg:#eef0f3;--card:#fff;--line:#e3e6ea;--txt:#1d2129;--sub:#6b7280;--acc:#2563eb;--warn:#b45309;--ok:#15803d}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:14px/1.5 -apple-system,"PingFang SC","Helvetica Neue",sans-serif;background:var(--bg);color:var(--txt);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{padding:12px 20px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:12px;flex:none}
+header h1{font-size:17px;font-weight:600}
+header .sub{color:var(--sub);font-size:12.5px}
+main{flex:1;display:flex;min-height:0}
+aside{width:360px;flex:none;border-right:1px solid var(--line);background:var(--card);overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
+.card{border:1px solid var(--line);border-radius:12px;padding:12px}
+.card h2{font-size:12.5px;font-weight:600;color:var(--sub);margin-bottom:9px;display:flex;justify-content:space-between;align-items:center}
+.card h2 .act{font-size:12px;color:var(--acc);cursor:pointer;font-weight:400}
+.card h2.tog{cursor:pointer;user-select:none}
+.card h2.tog .chev{display:inline-block;margin-left:5px;font-size:10px;color:#9aa1ab;transition:transform .15s}
+.card h2.tog.closed .chev{transform:rotate(-90deg)}
+label.f{display:block;font-size:11.5px;color:var(--sub);margin:7px 0 3px}
+select,input[type=number],input[type=text]{width:100%;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:13px;color:var(--txt)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.chk{display:flex;align-items:center;gap:6px;font-size:12.5px;margin-top:6px;cursor:pointer}
+.chk input{accent-color:var(--acc)}
+#dropZone{border:1.5px dashed #c4c9d1;border-radius:10px;padding:14px 10px;text-align:center;color:var(--sub);font-size:12.5px;cursor:pointer;transition:.15s}
+#dropZone.on{border-color:var(--acc);background:#eff6ff}
+#dropZone b{color:var(--acc);font-weight:500}
+#fileInput{display:none}
+#photoList{max-height:230px;overflow:auto;margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.ph{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:9px;padding:5px 7px}
+.ph img{width:34px;height:34px;object-fit:cover;border-radius:5px;background:#f0f1f3;flex:none}
+.ph .meta{flex:1;min-width:0}
+.ph .name{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph .dim{font-size:11px;color:var(--sub)}
+.stepper{display:flex;align-items:center;gap:0;border:1px solid var(--line);border-radius:7px;overflow:hidden;flex:none}
+.stepper button{width:20px;height:22px;border:none;background:#f5f6f8;cursor:pointer;font-size:13px;line-height:1}
+.stepper span{min-width:34px;text-align:center;font-size:12px}
+.ph .rm{border:none;background:none;color:#b0b5bd;cursor:pointer;font-size:15px;padding:0 2px;flex:none}
+.ph .rm:hover{color:#e11d48}
+.hintline{font-size:11.5px;color:var(--sub);margin-top:6px;line-height:1.45}
+#stage{flex:1;display:flex;flex-direction:column;min-width:0}
+#summaryBar{flex:none;padding:9px 18px;border-bottom:1px solid var(--line);background:#fbfcfd;font-size:12.5px;color:var(--txt)}
+#summaryBar b{color:var(--acc)}
+#summaryBar .warn{color:var(--warn)}
+#previewWrap{flex:1;overflow:auto;display:flex;align-items:flex-start;justify-content:flex-start;padding:16px 20px}
+#cv{display:block;margin:0 auto}
+#emptyHint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9aa1ab;font-size:14px;pointer-events:none}
+#printBar{flex:none;background:#fff;border-top:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px 10px;align-items:flex-end}
+#printBar .fld{display:flex;flex-direction:column;gap:3px}
+#printBar .fld>span{font-size:11px;color:var(--sub)}
+#printBar select,#printBar input{padding:5px 7px;font-size:12.5px}
+#printBar select{min-width:130px;max-width:230px}
+#printBar input[type=number]{width:56px}
+.btn{padding:8px 14px;border-radius:9px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:13px;white-space:nowrap}
+.btn:hover{background:#f5f6f8}
+.btn.primary{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:500}
+.btn.primary:hover{background:#1d4fd8}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+#printStatus{width:100%;font-size:12px;min-height:16px}
+#printBar{position:relative}
+#queuePanel{position:absolute;right:14px;bottom:calc(100% + 8px);width:540px;max-width:calc(100vw - 40px);background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 34px rgba(0,0,0,.16);padding:12px 14px;z-index:60;display:none}
+#queuePanel h3{font-size:13px;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px}
+#queuePanel h3 .ttl{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#queuePanel h3>span:last-child{flex:none;display:flex;gap:8px;align-items:center}
+.jobrow{display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 0;border-top:1px solid #f0f1f3}
+.jobrow .jname{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jobrow .ord{flex:none;width:20px;height:20px;border-radius:50%;background:#eef1f4;color:#5b6470;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.jobrow.next{background:#f0f6ff;border-radius:8px;margin:0 -8px;padding-left:8px;padding-right:8px}
+.jobrow.next .ord{background:#2563eb;color:#fff}
+.jobrow .chip{flex:none;font-size:10.5px;padding:2px 7px;border-radius:99px;background:#eef1f4;color:#5b6470;white-space:nowrap}
+.jobrow .chip.on{background:#dcfce7;color:#15803d}
+.jobrow .chip.next{background:#dbeafe;color:#1d4ed8}
+.jobrow .meta{flex:none;color:var(--sub);font-size:11px;white-space:nowrap}
+.jobrow button{border:none;background:#f5f6f8;border-radius:6px;padding:3px 9px;cursor:pointer;font-size:11px;flex:none}
+.jobrow button:hover{background:#fee2e2;color:#dc2626}
+.qempty{color:var(--sub);font-size:12.5px;padding:12px 0;text-align:center}
+#cancelAllBtn{color:#dc2626;border:1px solid #fecaca;background:#fef2f2;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:12px;white-space:nowrap}
+#cancelAllBtn:disabled{opacity:.4;cursor:not-allowed}
+#cancelAllBtn:hover:not(:disabled){background:#fee2e2}
+</style>
+</head>
+<body>
+<header><h1>照片排版打印</h1><span class="sub">6寸相纸（10.2×15.2cm）· 默认排两张 3寸（5.5×8.4cm）· 支持惠普照片纸直打</span></header>
+<main>
+<aside>
+  <div class="card">
+    <h2>照片 <span class="act" id="clearPhotos">清空</span></h2>
+    <div id="dropZone">点击选择或把照片拖到这里<br><b>支持 JPG / PNG，可多选</b></div>
+    <input type="file" id="fileInput" accept="image/*" multiple>
+    <div id="photoList"></div>
+    <div class="hintline">每张照片打印 1 份、占一个格；想多打一份就再次添加同一张照片。可一次多选多张照片。</div>
+  </div>
+
+  <div class="card">
+    <h2 class="tog" id="sizeCardHead">纸张与照片尺寸<span class="chev">▾</span></h2>
+    <div id="sizeCardBody">
+    <label class="f">相纸（打印机里放的纸）</label>
+    <select id="paperSel"></select>
+    <div class="grid2">
+      <div><label class="f">宽 mm</label><input type="number" id="paperW" min="20" max="500" step="0.5"></div>
+      <div><label class="f">高 mm</label><input type="number" id="paperH" min="20" max="600" step="0.5"></div>
+    </div>
+    <label class="f">纸张方向</label>
+    <select id="orientSel"><option value="v">竖放（高＞宽）</option><option value="h">横放（宽＞高）</option></select>
+    <label class="f">冲印尺寸（单张照片的最终尺寸）</label>
+    <select id="photoSel"></select>
+    <div class="grid2">
+      <div><label class="f">宽 mm</label><input type="number" id="photoW" min="10" max="400" step="0.5"></div>
+      <div><label class="f">高 mm</label><input type="number" id="photoH" min="10" max="400" step="0.5"></div>
+    </div>
+    <div class="hintline">常用：6寸 = 10.2×15.2cm（4×6″）；3寸 = 5.5×8.4cm；5寸 = 8.9×12.7cm；2寸证件照 = 3.5×4.9cm。</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>排版选项</h2>
+    <label class="f">打印模式</label>
+    <select id="printModeSel">
+      <option value="layout">拼版（一张纸排多格）</option>
+      <option value="single6">单张6寸（一纸一照，满幅无边）</option>
+    </select>
+    <div class="grid2">
+      <div><label class="f">格子大小</label><select id="sizeModeSel"><option value="fill">铺满纸面（白边最少）</option><option value="p23">照片占上 2/3，下 1/3 留白</option><option value="std">标准冲印尺寸</option></select></div>
+      <div><label class="f">照片摆放</label><select id="rotateChk"><option value="auto">自动旋转（选更大的排布）</option><option value="never">不旋转照片（保持原方向）</option></select></div>
+    </div>
+    <div class="grid2">
+      <div><label class="f">每张纸格数</label><select id="perSheetSel"><option value="">自动排满</option><option value="1">1 格</option><option value="2">2 格</option><option value="3">3 格</option><option value="4">4 格</option><option value="6">6 格</option><option value="8">8 格</option><option value="9">9 格</option><option value="12">12 格</option></select></div>
+      <div></div>
+    </div>
+    <div class="grid3">
+      <div><label class="f">间距 mm</label><input type="number" id="gapIn" min="0" max="40" step="0.5"></div>
+      <div><label class="f">边距 mm</label><input type="number" id="marginIn" min="0" max="40" step="0.5"></div>
+      <div><label class="f">出血 mm</label><input type="number" id="bleedIn" min="0" max="10" step="0.5"></div>
+    </div>
+    <div class="grid2">
+      <div><label class="f">图片填充</label><select id="fillSel"><option value="cover">裁满格子（推荐）</option><option value="contain">完整显示留白边</option></select></div>
+      <div><label class="f">裁切线</label><select id="cutSel"><option value="1">显示（虚线）</option><option value="0">不显示</option></select></div>
+    </div>
+    <div class="hintline">「铺满纸面」按第一张照片的宽高比放大格子。边距 0 + 纸张规格选 4x6.Fullbleed（无边框）时照片完全贴边；默认间距 2mm 是留出下刀位置，可自行改为 0。需要严格 3寸 等标准尺寸时选「标准冲印尺寸」。</div>
+  </div>
+</aside>
+
+<section id="stage">
+  <div id="summaryBar"><span id="summary"></span></div>
+  <div id="previewWrap" style="position:relative">
+    <canvas id="cv"></canvas>
+    <div id="emptyHint">把照片拖进左侧列表开始排版<br>（当前预览：6寸纸 · 两张3寸的空格）</div>
+  </div>
+  <div id="printBar">
+    <div class="fld" style="flex:1;min-width:170px"><span>打印机</span>
+      <div style="display:flex;gap:6px">
+        <select id="printerSel" style="flex:1"></select>
+        <button class="btn" id="refreshPrinters" style="padding:5px 9px">刷新</button>
+        <button class="btn" id="queueBtn" style="padding:5px 9px">📋 任务</button>
+      </div>
+    </div>
+    <div class="fld"><span>纸张规格</span><select id="sizeSel"><option value="auto">自动（6寸照片）</option></select></div>
+    <div class="fld"><span>纸张类型</span><select id="typeSel"><option value="auto">自动（照片纸）</option><option value="">不指定</option></select></div>
+    <div class="fld" id="borderRow" style="display:none"><span>边框</span><select id="borderSel"></select></div>
+    <div class="fld"><span>份数</span><input type="number" id="copiesIn" value="1" min="1" max="50"></div>
+    <div class="fld"><span>&nbsp;</span><label class="chk" style="margin:0"><input type="checkbox" id="qualityChk" checked>照片质量</label></div>
+    <div class="fld"><span>&nbsp;</span><label class="chk" style="margin:0"><input type="checkbox" id="fitChk" checked>按纸张缩放</label></div>
+    <div class="fld"><span>&nbsp;</span><button class="btn primary" id="btnPrint">🖨 直接打印</button></div>
+    <div class="fld"><span>&nbsp;</span><button class="btn" id="btnDownload">⬇ 下载 PDF</button></div>
+    <div class="fld"><span>&nbsp;</span><button class="btn" id="btnOpen">预览打开</button></div>
+    <div id="queuePanel"></div>
+    <div id="printStatus"></div>
+  </div>
+</section>
+</main>
+<script>
+"use strict";
+/* ================= 常量与状态 ================= */
+const MM2PT = 72/25.4;
+const PRESET_PAPER = [
+  {id:'6r', name:'6寸 10.2×15.2 cm（4R）', w:102, h:152},
+  {id:'5r', name:'5寸 8.9×12.7 cm（3R）',  w:89,  h:127},
+  {id:'7r', name:'7寸 12.7×17.8 cm（5R）', w:127, h:178},
+  {id:'a6', name:'A6 10.5×14.8 cm',        w:105, h:148},
+  {id:'a4', name:'A4 21×29.7 cm',          w:210, h:297},
+];
+const PRESET_PHOTO = [
+  {id:'p3', name:'3寸 5.5×8.4 cm',        w:55, h:84},
+  {id:'p4', name:'4寸 7.6×10.2 cm',       w:76, h:102},
+  {id:'p5', name:'5寸 8.9×12.7 cm',       w:89, h:127},
+  {id:'z2', name:'2寸证件 3.5×4.9 cm',    w:35, h:49},
+  {id:'z1', name:'1寸证件 2.5×3.5 cm',    w:25, h:35},
+];
+const S = {
+  photos: [],                 // {id, name, img, copies}
+  paper: {w:102, h:152, name:'6寸'},
+  photo: {w:55,  h:84,  name:'3寸'},
+  orient:'v', rotateMode:'auto', gap:2, margin:0, bleed:0,
+  cut:true, fill:'cover', perSheet:0, sizeMode:'fill', printMode:'layout',
+};
+const $ = id => document.getElementById(id);
+
+/* ================= 设置持久化 ================= */
+function save(){ try{ localStorage.setItem('photoPrintSettings', JSON.stringify({
+  paper:S.paper, photo:S.photo, orient:S.orient, rotateMode:S.rotateMode, gap:S.gap,
+  margin:S.margin, bleed:S.bleed, cut:S.cut, fill:S.fill, perSheet:S.perSheet,
+  sizeMode:S.sizeMode, printMode:S.printMode, sv:2 })); }catch(e){} }
+function load(){ try{
+  const d = JSON.parse(localStorage.getItem('photoPrintSettings')||'null');
+  if(d){
+    // 旧版本布尔 rotate 迁移为 rotateMode
+    if (d.rotate === true) d.rotateMode = 'auto';
+    else if (d.rotate === false) d.rotateMode = 'never';
+    delete d.rotate;
+    // v1 设置迁移：白边收窄到贴边（边距0/间距2）
+    if ((d.sv||1) < 2){ d.gap = 2; d.margin = 0; d.sv = 2; }
+    Object.assign(S, d);
+  }
+}catch(e){} }
+
+/* ================= 排版引擎 ================= */
+function paperMM(){
+  let {w,h} = S.paper;
+  if (S.orient==='h' && h>w) [w,h]=[h,w];
+  if (S.orient==='v' && w>h) [w,h]=[h,w];
+  return {w,h};
+}
+function computeAll(){
+  const P = paperMM(), ph = {w:S.photo.w, h:S.photo.h};
+  const gap = S.gap, m = S.margin;
+  const pa = ph.w/ph.h;                     // 预设冲印尺寸的宽高比
+  // 照片方向以第一张为准：格子方向跟随照片，绝不把横照片转成竖格
+  let a = pa;
+  if (S.photos.length){
+    const im = S.photos[0].img;
+    a = (im.naturalWidth||im.width)/(im.naturalHeight||im.height);
+  }
+  if (!isFinite(a) || a<=0) a = pa;
+  const photoL = a > 1, presetL = pa > 1;   // 是否横版
+
+  // 单张6寸模式：一纸一照，照片满幅。页面固定竖向（与4x6相纸一致），
+  // 横版照片把内容在页内旋转90°——打印成品即横版照片。
+  // （惠普固件在照片模式下处理横放PDF页面会只渲染一半，故永不发横页）
+  if (S.printMode === 'single6'){
+    const long = Math.max(P.w, P.h), short = Math.min(P.w, P.h);
+    const page = {w:short, h:long};
+    const list = S.photos.length ? S.photos : [null];
+    const sheets = list.map(p => [{x:0, y:0, w:page.w, h:page.h, photo:p, rotC: photoL}]);
+    return {paper:page, sheets, perSheet:1, rot:false, cols:1, rows:1,
+            used:S.photos.length, slotW:page.w, slotH:page.h, single6:true};
+  }
+
+  // 占纸 2/3 模式：照片铺满纸张上部 2/3（按图片填充方式裁满或留白），下部 1/3 整条留白
+  if (S.sizeMode === 'p23'){
+    const bandW = P.w, bandH = (2/3) * P.h;
+    const list = S.photos.length ? S.photos : [null];
+    const sheets = list.map(p => [{x:0, y:0, w:bandW, h:bandH, photo:p}]);
+    return {paper:P, sheets, perSheet:1, rot:false, cols:1, rows:1,
+            used:S.photos.length, slotW:bandW, slotH:bandH};
+  }
+
+  // 标准模式候选：预设尺寸（整体换向以匹配照片方向）
+  const cand = [];
+  for (const rot of [false, true]){
+    const pw = rot?ph.h:ph.w, phh = rot?ph.w:ph.h;
+    const cols = Math.floor((P.w - 2*m + gap) / (pw + gap));
+    const rows = Math.floor((P.h - 2*m + gap) / (phh + gap));
+    if (cols>=1 && rows>=1){
+      const slotL = rot ? !presetL : presetL;
+      cand.push({rot, cols, rows, n:cols*rows, match: slotL===photoL ? 1 : 0});
+    }
+  }
+  if (!cand.length) return null;
+
+  let N, grid, slotW, slotH;
+  if (S.sizeMode === 'fill'){
+    // 铺满纸面：格数沿用预设尺寸排满的结果（可手动固定），再按照片比例放大格子
+    const autoBest = cand.slice().sort((x,y)=> y.n-x.n || x.rot-y.rot)[0];
+    N = S.perSheet>0 ? S.perSheet : autoBest.n;
+    let best = null;
+    // 自动旋转模式：正放、旋转90°两种格子方向都试，取能排得更大的
+    const tryRot = (S.rotateMode||'never')==='auto' && Math.abs(Math.log((1/a)/a)) > 0.05;
+    const asps = tryRot ? [a, 1/a] : [a];
+    for (let cols=1; cols<=N; cols++){
+      if (N % cols) continue;
+      const rows = N/cols;
+      const cellW = (P.w - 2*m - (cols-1)*gap)/cols;
+      const cellH = (P.h - 2*m - (rows-1)*gap)/rows;
+      if (cellW<=0 || cellH<=0) continue;
+      for (const sa of asps){
+        const w = Math.max(5, Math.min(cellW, cellH*sa)), h = w/sa;
+        if (!best || w*h > best.area) best = {cols, rows, w, h, area:w*h};
+      }
+    }
+    if (!best) return null;
+    grid = {cols:best.cols, rows:best.rows}; slotW = best.w; slotH = best.h;
+  } else {
+    // 标准尺寸：格子方向优先匹配照片方向，其次格数多
+    const sorted = cand.slice().sort((x,y)=> y.match-x.match || y.n-x.n || x.rot-y.rot);
+    let pick;
+    if (S.perSheet>0){
+      const ok = cand.filter(c=>c.n>=S.perSheet).sort((x,y)=> y.match-x.match || x.n-y.n || x.rot-y.rot);
+      pick = ok[0] || sorted[0];
+      pick = {...pick, rows: Math.min(pick.rows, Math.ceil(S.perSheet/pick.cols))};
+      N = S.perSheet;
+    } else {
+      pick = sorted[0]; N = pick.n;
+    }
+    grid = {cols:pick.cols, rows:pick.rows};
+    slotW = pick.rot ? ph.h : ph.w;
+    slotH = pick.rot ? ph.w : ph.h;
+  }
+
+  const rowsU = grid.rows;
+  const tw = grid.cols*slotW + (grid.cols-1)*gap, th = rowsU*slotH + (rowsU-1)*gap;
+  const x0 = (P.w-tw)/2, y0 = (P.h-th)/2;
+  const base = [];
+  outer: for (let r=0;r<rowsU;r++) for (let c=0;c<grid.cols;c++){
+    if (base.length>=N) break outer;
+    base.push({x:x0+c*(slotW+gap), y:y0+r*(slotH+gap), w:slotW, h:slotH});
+  }
+  const q = []; for (const p of S.photos) q.push(p);   // 每张照片只排一份
+  const nsheets = Math.max(1, Math.ceil(Math.max(q.length,1)/N));
+  const sheets = [];
+  for (let i=0;i<nsheets;i++)
+    sheets.push(base.map((sl,j)=>({...sl, photo:q[i*N+j]||null})));
+  return {paper:P, sheets, perSheet:N, rot: slotW>slotH, cols:grid.cols, rows:rowsU,
+          used:q.length, slotW, slotH};
+}
+function needsRot(img, aspect){
+  // 默认从不旋转照片内容；仅当用户选择「自动旋转以减少裁切」时才允许
+  if ((S.rotateMode||'never') === 'never') return false;
+  const a = (img.naturalWidth||img.width)/(img.naturalHeight||img.height);
+  if (!isFinite(a) || a<=0) return false;
+  return Math.abs(Math.log((1/a)/aspect)) < Math.abs(Math.log(a/aspect)) - 0.02;
+}
+/* 把图片以 cover/contain 填进矩形，可选旋转90°（照片横放） */
+function drawFit(ctx, img, x, y, w, h, rot, mode){
+  const iw = img.naturalWidth||img.width, ih = img.naturalHeight||img.height;
+  let sc;
+  if (rot) sc = mode==='cover' ? Math.max(w/ih, h/iw) : Math.min(w/ih, h/iw);
+  else     sc = mode==='cover' ? Math.max(w/iw, h/ih) : Math.min(w/iw, h/ih);
+  const a = iw*sc, b = ih*sc;
+  ctx.save();
+  ctx.translate(x+w/2, y+h/2);
+  if (rot) ctx.rotate(Math.PI/2);
+  ctx.drawImage(img, -a/2, -b/2, a, b);
+  ctx.restore();
+}
+/* 裁切线：取每个格子边线，减去被照片(含出血)覆盖的部分 */
+function cutSegments(slots, bleed){
+  const rects = slots.map(s=>({x1:s.x-bleed+0.3, y1:s.y-bleed+0.3, x2:s.x+s.w+bleed-0.3, y2:s.y+s.h+bleed-0.3}));
+  const ivSub = (base, cuts)=>{
+    let ivs=[base];
+    for (const c of cuts){
+      const out=[];
+      for (const [a,b] of ivs){
+        if (c.b<=a+0.001 || c.a>=b-0.001){ out.push([a,b]); continue; }
+        if (c.a>a+0.001) out.push([a,c.a]);
+        if (c.b<b-0.001) out.push([c.b,b]);
+      }
+      ivs = out;
+    }
+    return ivs.filter(([a,b])=>b-a>0.05);
+  };
+  const segs=[];
+  for (const s of slots){
+    for (const y of [s.y, s.y+s.h]){
+      const cuts = rects.filter(r=>y>r.y1&&y<r.y2).map(r=>[r.x1,r.x2]);
+      for (const [a,b] of ivSub([s.x,s.x+s.w],cuts)) segs.push({h:1,y,x1:a,x2:b});
+    }
+    for (const x of [s.x, s.x+s.w]){
+      const cuts = rects.filter(r=>x>r.x1&&x<r.x2).map(r=>[r.y1,r.y2]);
+      for (const [a,b] of ivSub([s.y,s.y+s.h],cuts)) segs.push({h:0,x,y1:a,y2:b});
+    }
+  }
+  return segs;
+}
+
+/* ================= 预览 ================= */
+function render(){
+  const L = computeAll();
+  updateSummary(L);
+  const cv = $('cv'), hint = $('emptyHint');
+  if (!L){ cv.style.display='none'; hint.style.display='flex';
+    hint.innerHTML='⚠️ 当前照片尺寸放不进所选纸张，请调整尺寸或边距'; return; }
+  cv.style.display='block';
+  hint.style.display = S.photos.length ? 'none' : 'flex';
+  hint.innerHTML = '把照片拖进左侧列表开始排版<br>（当前预览：'+L.paper.w+'×'+L.paper.h+'mm · 每张 '+L.perSheet+' 格）';
+  const wrap = $('previewWrap');
+  const k = Math.min(3, Math.max(0.7, (wrap.clientHeight-70) / L.paper.h));
+  const pad=16, gapX=28, labelH=22, n=L.sheets.length;
+  const cw = pad*2 + n*L.paper.w*k + (n-1)*gapX;
+  const ch = pad*2 + labelH + L.paper.h*k;
+  const dpr = window.devicePixelRatio||1;
+  cv.width = Math.round(cw*dpr); cv.height = Math.round(ch*dpr);
+  cv.style.width = cw+'px'; cv.style.height = ch+'px';
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,cw,ch);
+  L.sheets.forEach((slots,i)=>{
+    const ox = pad + i*(L.paper.w*k+gapX), oy = pad + labelH;
+    ctx.fillStyle='#8a8f99'; ctx.font='11px -apple-system'; ctx.textAlign='left';
+    ctx.fillText('第 '+(i+1)+' 张 / 共 '+n+' 张'+(S.photos.length?'':'（未加载照片）'), ox, oy-7);
+    ctx.save();
+    ctx.shadowColor='rgba(0,0,0,.18)'; ctx.shadowBlur=10; ctx.shadowOffsetY=2;
+    ctx.fillStyle='#fff'; ctx.fillRect(ox,oy,L.paper.w*k,L.paper.h*k);
+    ctx.restore();
+    ctx.strokeStyle='#d8dbe0'; ctx.lineWidth=1;
+    ctx.strokeRect(ox+.5,oy+.5,L.paper.w*k-1,L.paper.h*k-1);
+    for (const s of slots){
+      const bx=Math.max(0,s.x-S.bleed), by=Math.max(0,s.y-S.bleed);
+      const x2=Math.min(L.paper.w,s.x+s.w+S.bleed), y2=Math.min(L.paper.h,s.y+s.h+S.bleed);
+      const X=ox+bx*k, Y=oy+by*k, W=(x2-bx)*k, H=(y2-by)*k;
+      if (s.photo){
+        ctx.save(); ctx.beginPath(); ctx.rect(X,Y,W,H); ctx.clip();
+        const rot = (s.rotC !== undefined) ? s.rotC : needsRot(s.photo.img, s.w/s.h);
+        drawFit(ctx, s.photo.img, X, Y, W, H, rot, S.fill);
+        ctx.restore();
+      } else {
+        ctx.fillStyle='#f7f8fa'; ctx.fillRect(X,Y,W,H);
+      }
+    }
+    if (S.sizeMode==='p23'){
+      // 占纸2/3：交界处浅灰虚线（与打印输出一致）
+      const yB = (slots[0].y + slots[0].h) * k;
+      ctx.save();
+      ctx.strokeStyle='#c9ccd1'; ctx.lineWidth=1; ctx.setLineDash([5,3]);
+      ctx.beginPath();
+      ctx.moveTo(ox, oy+yB); ctx.lineTo(ox+L.paper.w*k, oy+yB);
+      ctx.stroke(); ctx.restore();
+    } else if (S.cut && S.printMode!=='single6'){
+      ctx.save();
+      ctx.strokeStyle='#d97706'; ctx.lineWidth=1; ctx.setLineDash([4,3]);
+      ctx.beginPath();
+      for (const g of cutSegments(slots, S.bleed)){
+        if (g.h){ ctx.moveTo(ox+g.x1*k, oy+g.y*k); ctx.lineTo(ox+g.x2*k, oy+g.y*k); }
+        else    { ctx.moveTo(ox+g.x*k, oy+g.y1*k); ctx.lineTo(ox+g.x*k, oy+g.y2*k); }
+      }
+      ctx.stroke(); ctx.restore();
+    }
+  });
+}
+function updateSummary(L){
+  const el = $('summary');
+  if (!L){ el.innerHTML = '<span class="warn">⚠️ 当前照片尺寸放不进所选纸张，请调整尺寸或边距</span>'; return; }
+  if (L.single6){
+    const rot = L.sheets[0][0] && L.sheets[0][0].photo ? L.sheets[0][0].rotC : false;
+    el.innerHTML = '单张6寸 · 页面 <b>'+L.paper.w+'×'+L.paper.h+'mm</b>（相纸竖向，照片满幅'+
+      (rot ? '，横片已在页内旋转，成品即横版照片' : '')+'）· 一纸一照 · 共 <b>'+L.sheets.length+'</b> 张纸';
+    return;
+  }
+  el.innerHTML = '纸张 <b>'+L.paper.w+'×'+L.paper.h+'mm</b> · 每张 <b>'+L.perSheet+'</b> 格（'+L.cols+'列×'+L.rows+'行'+(L.rot?'，照片横放':'')+
+    (S.sizeMode==='fill' ? '，每格 '+r1(L.slotW)+'×'+r1(L.slotH)+'mm 铺满'
+     : S.sizeMode==='p23' ? '，照片占上2/3（'+r1(L.slotW)+'×'+r1(L.slotH)+'mm），下1/3留白' : '')+'）· 已排 <b>'+L.used+'</b> 张照片 · 共 <b>'+L.sheets.length+'</b> 张纸';
+}
+
+/* ================= 照片管理 ================= */
+/* 检查图片文件是否完整：JPEG 必须以 FFD9(EOI) 结尾、PNG 必须含 IEND。
+   被截断的文件（如微信/QQ传输中断）解码后会出现白色虚影，打印出来就是废片 */
+async function checkFileComplete(f){
+  try{
+    const buf = new Uint8Array(await f.arrayBuffer());
+    const n = buf.length;
+    if (n < 64) return false;
+    if (/jpe?g/i.test(f.type) || /\.jpe?g$/i.test(f.name)){
+      for (let i = n-1; i >= Math.max(1, n-16); i--){
+        if (buf[i]===0xD9 && buf[i-1]===0xFF) return true;   // 允许末尾少量填充字节
+      }
+      return false;
+    }
+    if (/png/i.test(f.type) || /\.png$/i.test(f.name)){
+      const tail = new TextDecoder('latin1').decode(buf.subarray(Math.max(0, n-16)));
+      return tail.includes('IEND');
+    }
+  }catch(e){ /* 读取失败时不拦截，交给解码报错 */ }
+  return true;
+}
+async function addPhotos(files){
+  const all = Array.from(files);
+  const imgs = all.filter(f=>f.type.startsWith('image/'));
+  if (all.length > imgs.length) setStatus('warn', (all.length-imgs.length)+' 个文件不是图片格式，已跳过');
+  if (!imgs.length) return;
+  const bad = [];
+  for (const f of imgs){
+    if (!(await checkFileComplete(f))){ bad.push(f.name); continue; }
+    await new Promise(res=>{
+      const url = URL.createObjectURL(f);
+      const img = new Image();
+      img.onload = ()=>{ S.photos.push({id:crypto.randomUUID(), name:f.name, img, copies:1}); res(); };
+      img.onerror = ()=>{ alert('无法解码：'+f.name+'（请用 JPG/PNG）'); res(); };
+      img.src = url;
+    });
+  }
+  refreshList(); render();
+  if (bad.length)
+    setStatus('err', '⚠️ 已跳过不完整的文件：'+bad.join('、')+' —— 数据被截断，打印会出现白色虚影。请重新获取原图（微信传图勾选「原图」，或用隔空投送/数据线）');
+}
+function refreshList(){
+  const box = $('photoList');
+  box.innerHTML = '';
+  S.photos.forEach((p, i)=>{
+    const d = document.createElement('div'); d.className='ph';
+    d.innerHTML = '<img src="'+p.img.src+'"><div class="meta"><div class="name"></div>'+
+      '<div class="dim">'+p.img.naturalWidth+'×'+p.img.naturalHeight+' px</div></div>'+
+      '<button class="rm" title="移除">✕</button>';
+    d.querySelector('.name').textContent = p.name;
+    d.querySelector('.rm').onclick = ()=>{ S.photos.splice(i,1); refreshList(); render(); };
+    box.appendChild(d);
+  });
+}
+
+/* ================= PDF 生成（纯 JS，页面为精确物理尺寸） ================= */
+function num(v){ return String(Math.round(v*100)/100); }
+function r1(v){ return Math.round(v*10)/10; }
+function bytesToB64(bytes){
+  let bin=''; const CH=0x8000;
+  for (let i=0;i<bytes.length;i+=CH) bin += String.fromCharCode.apply(null, bytes.subarray(i,i+CH));
+  return btoa(bin);
+}
+function rasterizeSlot(img, wMM, hMM, rot){
+  const dpi=300;
+  const tw = Math.max(16, Math.round(wMM/25.4*dpi));
+  const th = Math.max(16, Math.round(hMM/25.4*dpi));
+  const c = document.createElement('canvas'); c.width=tw; c.height=th;
+  const x = c.getContext('2d');
+  x.fillStyle='#ffffff'; x.fillRect(0,0,tw,th);
+  drawFit(x, img, 0, 0, tw, th, rot, S.fill);
+  return new Promise(res=>c.toBlob(b=>res(b), 'image/jpeg', 0.92));
+}
+async function buildPDFBytes(){
+  const L = computeAll();
+  if (!L) throw new Error('当前尺寸放不进纸张');
+  const k = MM2PT;
+  const PW = num(L.paper.w*k), PH = num(L.paper.h*k);
+  const images = [], keyMap = new Map();
+  const sheetItems = [];
+  for (const slots of L.sheets){
+    const items = [];
+    for (const s of slots){
+      if (!s.photo) continue;
+      const rot = (s.rotC !== undefined) ? s.rotC : needsRot(s.photo.img, s.w/s.h);
+      const tw = Math.max(16, Math.round(s.w/25.4*300));
+      const th = Math.max(16, Math.round(s.h/25.4*300));
+      const key = s.photo.id+'#'+(rot?1:0)+'#'+tw+'x'+th;
+      let idx = keyMap.get(key);
+      if (idx===undefined){
+        const blob = await rasterizeSlot(s.photo.img, s.w, s.h, rot);
+        const buf = new Uint8Array(await blob.arrayBuffer());
+        idx = images.length; images.push({w:tw, h:th, bytes:buf});
+        keyMap.set(key, idx);
+      }
+      items.push({s, idx});
+    }
+    sheetItems.push(items);
+  }
+  const enc = new TextEncoder();
+  const chunks=[]; let pos=0;
+  const put = b=>{ chunks.push(b); pos+=b.length; };
+  const putS = t=>put(enc.encode(t));
+  const offs = [];
+  const header = new Uint8Array([0x25,0x50,0x44,0x46,0x2d,0x31,0x2e,0x34,0x0a,0x25,0xe2,0xe3,0xcf,0xd3,0x0a]);
+  put(header);
+  function obj(n, s){ offs[n]=pos; putS(n+' 0 obj\n'+s+'\nendobj\n'); }
+  function streamObj(n, dict, bytes){ offs[n]=pos; putS(n+' 0 obj\n'+dict+'\nstream\n'); put(bytes); putS('\nendstream\nendobj\n'); }
+  const nS = sheetItems.length, firstImg = 3+2*nS;
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, '<< /Type /Pages /Kids ['+sheetItems.map((_,i)=>(3+2*i)+' 0 R').join(' ')+'] /Count '+nS+' >>');
+  sheetItems.forEach((items,i)=>{
+    const slots = L.sheets[i];
+    const xo = items.map(it=>' /Im'+it.idx+' '+(firstImg+it.idx)+' 0 R').join('');
+    obj(3+2*i, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+PW+' '+PH+
+               '] /Resources << /XObject <<'+xo+' >> >> /Contents '+(4+2*i)+' 0 R >>');
+    const cs = contentStream(slots, items, L, PW, PH, k);
+    streamObj(4+2*i, '<< /Length '+enc.encode(cs).length+' >>', enc.encode(cs));
+  });
+  images.forEach((im,j)=>{
+    streamObj(firstImg+j,
+      '<< /Type /XObject /Subtype /Image /Width '+im.w+' /Height '+im.h+
+      ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+im.bytes.length+' >>',
+      im.bytes);
+  });
+  const total = 3 + 2*nS + images.length;
+  const xrefPos = pos;
+  let xref = 'xref\n0 '+total+'\n0000000000 65535 f \n';
+  for (let nn=1; nn<total; nn++) xref += String(offs[nn]).padStart(10,'0')+' 00000 n \n';
+  putS(xref);
+  putS('trailer\n<< /Size '+total+' /Root 1 0 R >>\nstartxref\n'+xrefPos+'\n%%EOF\n');
+  return new Blob(chunks, {type:'application/pdf'});
+}
+function contentStream(slots, items, L, PW, PH, k){
+  const lines = ['q'];
+  for (const {s, idx} of items){
+    const x1 = Math.max(0, s.x-S.bleed), y1 = Math.max(0, s.y-S.bleed);
+    const x2 = Math.min(L.paper.w, s.x+s.w+S.bleed), y2 = Math.min(L.paper.h, s.y+s.h+S.bleed);
+    const W = num((x2-x1)*k), H = num((y2-y1)*k);
+    const X = num(x1*k), Y = num(PH - y2*k);
+    lines.push('q', W+' 0 0 '+H+' '+X+' '+Y+' cm', '/Im'+idx+' Do', 'Q');
+  }
+  lines.push('Q');
+  if (S.sizeMode==='p23' && slots.length){
+    // 占纸2/3：照片与留白的交界处画一条浅灰细虚线（打印出来很淡）
+    const yB = PH - (slots[0].y + slots[0].h) * k;
+    lines.push('0.2 w 0.75 G [3 2] 0 d');
+    lines.push('0 '+num(yB)+' m '+num(PW)+' '+num(yB)+' l S');
+    lines.push('[] 0 d');
+  } else if (S.cut && S.printMode!=='single6'){
+    lines.push('0.35 w 0.55 G [2.5 2] 0 d');
+    for (const g of cutSegments(slots, S.bleed)){
+      if (g.h) lines.push(num(g.x1*k)+' '+num(PH-g.y*k)+' m '+num(g.x2*k)+' '+num(PH-g.y*k)+' l S');
+      else     lines.push(num(g.x*k)+' '+num(PH-g.y2*k)+' m '+num(g.x*k)+' '+num(PH-g.y1*k)+' l S');
+    }
+    lines.push('[] 0 d');
+  }
+  return lines.join('\n');
+}
+
+/* ================= 打印机对接 ================= */
+let serviceOK = false, printerData = {printers:[], default:null};
+/* 打印机显示别名（下拉框/面板显示用；内部仍用真实名称提交任务） */
+const PRINTER_ALIAS = {
+  'HP_Smart_Tank_580_590_series__550ACC__20261031200307': 'HP_Smart_599'
+};
+function dispName(n){ return PRINTER_ALIAS[n] || n; }
+let printerCaps = {pagesizes:[], mediatypeName:'MediaType', mediatypeChoices:[]};
+const PHOTO_RE = /photo|photographic|gloss|相|照片|光面|premium/i;
+const PLAIN_RE = /stationery|plain|普通/i;
+/* 6寸规格按优先级自动挑选：无边框6寸 > 4x6 > 其它6寸写法 */
+const SIZE_PRI = [/^4x6\.fullbleed$/i, /^4x6$/i, /4x6|6x4|10x15|102x152|om4x6/i, /100x150/i];
+function autoPickSize(choices){
+  for (const rx of SIZE_PRI){ const c = choices.find(c=>rx.test(c)); if (c) return c; }
+  return null;
+}
+/* 按当前相纸尺寸挑选纸张规格/介质类型：
+   照片尺寸(6寸/5寸/7寸) → 对应照片规格+照片纸；A4/A6 → 普通纸规格+普通纸类型 */
+function paperKind(){
+  const P = paperMM();
+  const short = Math.min(P.w, P.h), long = Math.max(P.w, P.h);
+  const near = (v, t) => Math.abs(v-t) <= 3;
+  if (near(short,102) && near(long,152)) return 'photo6';
+  if (near(short,89)  && near(long,127)) return 'photo5';
+  if (near(short,127) && near(long,178)) return 'photo7';
+  if (near(short,210) && near(long,297)) return 'a4';
+  if (near(short,105) && near(long,148)) return 'a6';
+  return 'other';
+}
+function pickMediaForPaper(){
+  const c = printerCaps.pagesizes;
+  const has = re => { const x = c.find(x=>re.test(x)); return x || null; };
+  switch (paperKind()){
+    case 'photo6': return autoPickSize(c);
+    case 'photo5': return has(/^3\.5x5(\.fullbleed)?$/i) || has(/3\.5x5|5x3\.5/i);
+    case 'photo7': return has(/^5x7(\.fullbleed)?$/i)     || has(/5x7|7x5/i);
+    case 'a4':     return has(/^a4$/i)                    || has(/^a4/i);
+    case 'a6':     return has(/^a6(\.fullbleed)?$/i)      || has(/^a6/i);
+    default: return '';
+  }
+}
+function pickTypeForPaper(){
+  const ch = printerCaps.mediatypeChoices;
+  const kind = paperKind();
+  if (kind.startsWith('photo')) return ch.find(c=>PHOTO_RE.test(c)) || 'Photo';
+  return ch.find(c=>PLAIN_RE.test(c)) || '';   // A4/A6/自定义 → 普通纸优先，无则不指定
+}
+function typeLabelCN(t){
+  if (/stationery|plain/i.test(t)) return '普通纸';
+  if (PHOTO_RE.test(t)) return '照片纸';
+  return '';
+}
+function updateAutoLabels(){
+  const m = pickMediaForPaper(), t = pickTypeForPaper();
+  const sa = $('sizeSel').querySelector('option[value=auto]');
+  if (sa) sa.textContent = m ? '自动（'+m+'）' : '自动（未检测到匹配规格，将按 PDF 页面缩放）';
+  const ta = $('typeSel').querySelector('option[value=auto]');
+  if (ta) ta.textContent = t ? '自动（'+typeLabelCN(t)+' '+t+'）' : '自动（不指定纸张类型）';
+}
+
+async function loadPrinters(){
+  const wasOK = serviceOK;
+  try{
+    const r = await fetch('/api/printers'); printerData = await r.json();
+    serviceOK = true;
+  }catch(e){
+    serviceOK = false;
+    setStatus('warn', '⚠️ 打印服务未连接（直接打印不可用）。仍可下载 PDF 后手动打印。');
+    $('btnPrint').disabled = true; $('btnOpen').disabled = true;
+    return;
+  }
+  if (!wasOK) setStatus('ok', '✔ 打印服务已连接');   // 避免覆盖用户操作产生的提示
+  const sel = $('printerSel');
+  sel.innerHTML = '';
+  if (!printerData.printers.length){
+    sel.innerHTML = '<option value="">未检测到打印机</option>';
+    $('btnPrint').disabled = true;
+    return;
+  }
+  // 默认选惠普；没有惠普再用系统默认，最后取第一台
+  const pick = (printerData.printers.find(p=>/hp|惠普/i.test(p.name)) || {}).name ||
+    (printerData.printers.some(p=>p.name===printerData.default) ? printerData.default : printerData.printers[0].name);
+  for (const p of printerData.printers){
+    const o = document.createElement('option');
+    o.value = p.name;
+    o.textContent = dispName(p.name) + (p.name===pick ? '（默认）' : '');
+    o.title = p.name;   // 悬停显示完整名称
+    sel.appendChild(o);
+  }
+  sel.value = pick;
+  $('btnPrint').disabled = false; $('btnOpen').disabled = false;
+  loadPrinterOptions(sel.value);
+}
+async function loadPrinterOptions(printer){
+  const sizeSel = $('sizeSel'), typeSel = $('typeSel'), borderRow = $('borderRow'), borderSel = $('borderSel');
+  sizeSel.innerHTML = '<option value="auto">自动</option>';
+  typeSel.innerHTML = '<option value="auto">自动</option><option value="">不指定</option>';
+  borderRow.style.display = 'none'; borderSel.innerHTML = '';
+  printerCaps = {pagesizes:[], mediatypeName:'MediaType', mediatypeChoices:[]};
+  if (!printer) return;
+  let d;
+  try{ d = await (await fetch('/api/options?printer='+encodeURIComponent(printer))).json(); }
+  catch(e){ return; }
+  // 纸张规格列表
+  const ps = d.pagesize||{};
+  printerCaps.pagesizes = ps.choices||[];
+  for (const c of ps.choices||[]){
+    const o = document.createElement('option'); o.value = c;
+    o.textContent = c + (/fullbleed/i.test(c) ? '（无边框）' : '') + (c===ps.current ? '（当前默认）' : '');
+    sizeSel.appendChild(o);
+  }
+  const co = document.createElement('option'); co.value='Custom.102x152mm'; co.textContent='Custom 102×152mm（6寸）';
+  sizeSel.appendChild(co);
+  // 纸张类型列表
+  const mt = d.mediatype||{};
+  printerCaps.mediatypeName = mt.name || 'MediaType';
+  printerCaps.mediatypeChoices = mt.choices||[];
+  for (const c of mt.choices||[]){
+    const o = document.createElement('option'); o.value = c;
+    o.textContent = c + (c===mt.current ? '（默认）' : '');
+    typeSel.appendChild(o);
+  }
+  // 无边框（部分驱动以独立选项提供；本机 HP 通过 4x6.Fullbleed 规格实现）
+  const bl = d.borderless||{};
+  if (bl.name && (bl.choices||[]).length){
+    const on  = (bl.choices||[]).find(c=>/true|on|yes|photo|无边框/i.test(c));
+    const off = (bl.choices||[]).find(c=>/false|off|no|border/i.test(c)) || (bl.choices||[]).find(c=>c!==on);
+    if (on){
+      borderRow.style.display = '';
+      borderSel.innerHTML = '<option value="">跟随打印机</option>';
+      const o1 = document.createElement('option'); o1.value = on;  o1.textContent = '无边框（'+on+'）'; borderSel.appendChild(o1);
+      if (off){ const o2 = document.createElement('option'); o2.value = off; o2.textContent = '有边框（'+off+'）'; borderSel.appendChild(o2); }
+    }
+  }
+  updateAutoLabels();   // 自动项按当前相纸尺寸决定
+  loadQueue();
+}
+
+/* ================= 打印队列 ================= */
+let queueVisible = false;
+async function loadQueue(){
+  if (!serviceOK) return;
+  const printer = $('printerSel').value;
+  let jobs = [];
+  try{
+    const d = await (await fetch('/api/queue?printer='+encodeURIComponent(printer))).json();
+    jobs = d.jobs||[];
+  }catch(e){ return; }
+  $('queueBtn').textContent = '📋 任务 ' + jobs.length + (jobs.length ? ' ⚠️' : '');
+  renderQueuePanel(jobs);
+}
+function renderQueuePanel(jobs){
+  const p = $('queuePanel');
+  if (!queueVisible){ p.style.display = 'none'; return; }
+  p.style.display = 'block';
+  const pname = dispName($('printerSel').value) || '打印机';
+  p.innerHTML = '<h3><span class="ttl">'+pname+' · 待打印任务 '+jobs.length+' 个</span>'+
+    '<span><button id="cancelAllBtn" '+(jobs.length?'':'disabled')+'>一键取消全部</button> '+
+    '<button id="qCloseBtn" style="border:none;background:none;cursor:pointer;font-size:15px;color:#9aa1ab">✕</button></span></h3>'+
+    (jobs.length ? jobs.map((j, idx)=>{
+      const nxt = idx === 0;
+      let chip = j.state==='打印中' ? '打印中' : (nxt ? '下一个打印' : '排队中');
+      if (j.state==='打印中' && j.elapsed_s){
+        const m = Math.floor(j.elapsed_s/60), s = j.elapsed_s%60;
+        chip += ' · ' + (m ? m+'分' : '') + s + '秒';
+      }
+      return '<div class="jobrow'+(nxt?' next':'')+'">'+
+        '<span class="ord">'+(idx+1)+'</span>'+
+        '<span class="jname" title="'+(j.name||'')+'">'+(j.name || '（未记录文件名）')+'</span>'+
+        '<span class="chip'+(j.state==='打印中'?' on':(nxt?' next':''))+'">'+chip+'</span>'+
+        '<span class="meta">#'+j.job+' · '+j.user+' · '+j.size_kb+'KB · '+j.time+'</span>'+
+        '<button data-job="'+j.job+'">取消</button></div>';
+    }).join('')
+     : '<div class="qempty">✔ 队列是空的，没有待打印任务</div>');
+  const ca = p.querySelector('#cancelAllBtn');
+  if (ca) ca.onclick = ()=>cancelJobs(null);
+  p.querySelectorAll('button[data-job]').forEach(b=> b.onclick = ()=>cancelJobs(+b.dataset.job));
+  p.querySelector('#qCloseBtn').onclick = ()=>{ queueVisible=false; p.style.display='none'; };
+}
+async function cancelJobs(job){
+  const printer = $('printerSel').value;
+  setStatus('', job ? '正在取消任务 #'+job+'…' : '正在取消全部任务…');
+  try{
+    const r = await fetch('/api/cancel', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({printer, job})});
+    const d = await r.json();
+    setStatus(d.ok ? 'ok' : 'err', (d.ok ? '✔ ' : '✕ ') + d.message);
+  }catch(e){ setStatus('err', '✕ 取消失败：'+e.message); }
+  loadQueue();
+}
+function resolvePrintOptions(){
+  const size = $('sizeSel').value;
+  const type = $('typeSel').value;
+  return {
+    media: size==='auto' ? (pickMediaForPaper()||'') : size,
+    mediatype: type==='auto' ? (pickTypeForPaper()||'') : type,
+    mediatype_name: printerCaps.mediatypeName,
+    borderless: $('borderSel').value||''
+  };
+}
+async function makePDF(){
+  try{
+    return await buildPDFBytes();
+  }catch(e){ setStatus('err', '✕ '+e.message); throw e; }
+}
+async function doPrint(){
+  if (!serviceOK) return;
+  const L = computeAll();
+  if (!L) return;
+  // 任务标题 = 本次打印涉及的文件名（队列面板里靠它区分任务）
+  const names = [];
+  for (const sl of L.sheets) for (const s of sl)
+    if (s.photo && !names.includes(s.photo.name)) names.push(s.photo.name);
+  const title = names.length
+    ? (names.slice(0,2).join('、') + (names.length>2 ? ' 等'+names.length+'个文件' : ''))
+    : '照片排版打印';
+  setStatus('', '正在生成 PDF…');
+  let blob;
+  try{ blob = await makePDF(); }catch(e){ return; }
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  const po = resolvePrintOptions();
+  setStatus('', '正在发送到打印机…（'+L.sheets.length+' 张纸）');
+  try{
+    const r = await fetch('/api/print', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({pdf: bytesToB64(buf), printer: $('printerSel').value,
+        copies: +$('copiesIn').value||1, media: po.media, mediatype: po.mediatype,
+        mediatype_name: po.mediatype_name, borderless: po.borderless,
+        quality: $('qualityChk').checked, fit: $('fitChk').checked, title})});
+    const d = await r.json();
+    if (d.ok){ setStatus('ok', '✔ '+d.message); loadQueue(); }
+    else setStatus('err', '✕ '+(d.error||'打印失败'));
+  }catch(e){ setStatus('err', '✕ 打印服务连接失败：'+e.message); }
+}
+async function doDownload(){
+  let blob;
+  try{ blob = await makePDF(); }catch(e){ return; }
+  const L = computeAll();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '排版_'+L.paper.w+'x'+L.paper.h+'mm_'+L.perSheet+'格_'+L.sheets.length+'张.pdf';
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+  setStatus('ok', '✔ PDF 已下载（页面为精确物理尺寸，打印时选实际大小/无缩放）');
+}
+async function doOpen(){
+  let blob;
+  try{ blob = await makePDF(); }catch(e){ return; }
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  try{
+    const r = await fetch('/api/open', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({pdf: bytesToB64(buf)})});
+    const d = await r.json();
+    if (d.ok) setStatus('ok', '✔ 已在「预览」打开，⌘P 打印时可手动选纸张类型/无边框');
+    else setStatus('err', '✕ '+(d.error||'打开失败'));
+  }catch(e){ setStatus('err', '✕ 打印服务连接失败：'+e.message); }
+}
+function setStatus(cls, msg){ const el=$('printStatus'); el.className=cls; el.textContent=msg; }
+
+/* ================= 控件绑定 ================= */
+function fillPresetSel(sel, presets, cur){
+  sel.innerHTML = '';
+  for (const p of presets){
+    const o = document.createElement('option');
+    o.value = p.id;
+    o.textContent = p.name;
+    sel.appendChild(o);
+  }
+  const c = document.createElement('option'); c.value='custom'; c.textContent='自定义…'; sel.appendChild(c);
+  const hit = presets.find(p=>Math.abs(p.w-cur.w)<0.01 && Math.abs(p.h-cur.h)<0.01);
+  sel.value = hit ? hit.id : 'custom';
+}
+function syncSizeMode(){
+  // 铺满/占纸2/3/单张模式：冲印尺寸只决定无照片时的比例，输入框置灰
+  const off = (S.sizeMode||'fill')==='fill' || S.sizeMode==='p23' || S.printMode==='single6';
+  for (const id of ['photoSel','photoW','photoH']) $(id).disabled = off;
+  syncPrintMode();
+}
+function syncPrintMode(){
+  // 单张6寸模式：拼版专属控件置灰（页面横竖跟随照片方向）
+  const single = S.printMode === 'single6';
+  for (const id of ['sizeModeSel','rotateChk','perSheetSel','gapIn','marginIn','bleedIn','cutSel','orientSel'])
+    $(id).disabled = single;
+}
+function bindInputs(){
+  const paperSel=$('paperSel'), photoSel=$('photoSel');
+  fillPresetSel(paperSel, PRESET_PAPER, S.paper);
+  fillPresetSel(photoSel, PRESET_PHOTO, S.photo);
+  $('paperW').value=S.paper.w; $('paperH').value=S.paper.h;
+  $('photoW').value=S.photo.w; $('photoH').value=S.photo.h;
+  $('orientSel').value=S.orient;
+  $('rotateChk').value=S.rotateMode||'never';
+  $('perSheetSel').value=S.perSheet||'';
+  $('gapIn').value=S.gap; $('marginIn').value=S.margin; $('bleedIn').value=S.bleed;
+  $('fillSel').value=S.fill; $('cutSel').value=S.cut?'1':'0';
+  $('sizeModeSel').value = S.sizeMode || 'fill';
+  $('printModeSel').value = S.printMode || 'layout';
+  syncSizeMode();
+
+  paperSel.onchange = ()=>{ if(paperSel.value==='custom') return;
+    const p = PRESET_PAPER.find(x=>x.id===paperSel.value);
+    S.paper={w:p.w,h:p.h,name:p.name}; $('paperW').value=p.w; $('paperH').value=p.h; save(); render(); updateAutoLabels(); };
+  $('paperW').oninput = $('paperH').oninput = ()=>{
+    S.paper={w:+$('paperW').value||102, h:+$('paperH').value||152, name:'自定义'};
+    paperSel.value='custom'; save(); render(); updateAutoLabels(); };
+  photoSel.onchange = ()=>{ if(photoSel.value==='custom') return;
+    const p = PRESET_PHOTO.find(x=>x.id===photoSel.value);
+    S.photo={w:p.w,h:p.h,name:p.name}; $('photoW').value=p.w; $('photoH').value=p.h; save(); render(); };
+  $('photoW').oninput = $('photoH').oninput = ()=>{
+    S.photo={w:+$('photoW').value||55, h:+$('photoH').value||84, name:'自定义'};
+    photoSel.value='custom'; save(); render(); };
+  $('orientSel').onchange = e=>{ S.orient=e.target.value; save(); render(); updateAutoLabels(); };
+  $('sizeModeSel').onchange = e=>{ S.sizeMode=e.target.value; syncSizeMode(); save(); render(); };
+  $('printModeSel').onchange = e=>{ S.printMode=e.target.value; syncSizeMode(); save(); render(); };
+  $('rotateChk').onchange = e=>{ S.rotateMode=e.target.value; save(); render(); };
+  $('perSheetSel').onchange = e=>{ S.perSheet=+e.target.value||0; save(); render(); };
+  $('gapIn').oninput = e=>{ S.gap=Math.max(0,+e.target.value||0); save(); render(); };
+  $('marginIn').oninput = e=>{ S.margin=Math.max(0,+e.target.value||0); save(); render(); };
+  $('bleedIn').oninput = e=>{ S.bleed=Math.max(0,+e.target.value||0); save(); render(); };
+  $('fillSel').onchange = e=>{ S.fill=e.target.value; save(); render(); };
+  $('cutSel').onchange = e=>{ S.cut=e.target.value==='1'; save(); render(); };
+
+  const dz = $('dropZone'), fi = $('fileInput');
+  dz.onclick = ()=>fi.click();
+  fi.onchange = ()=>{ addPhotos(fi.files); fi.value=''; };
+  ['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev, e=>{e.preventDefault(); dz.classList.add('on');}));
+  ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev, e=>{e.preventDefault(); dz.classList.remove('on');}));
+  dz.addEventListener('drop', e=>addPhotos(e.dataTransfer.files));
+  $('clearPhotos').onclick = ()=>{ S.photos=[]; refreshList(); render(); };
+
+  $('refreshPrinters').onclick = loadPrinters;
+  $('queueBtn').onclick = ()=>{ queueVisible = !queueVisible;
+    if (queueVisible) loadQueue(); else $('queuePanel').style.display = 'none'; };
+  $('printerSel').onchange = e=>loadPrinterOptions(e.target.value);
+  $('btnPrint').onclick = doPrint;
+  $('btnDownload').onclick = doDownload;
+  $('btnOpen').onclick = doOpen;
+  window.addEventListener('resize', render);
+}
+
+/* ================= 启动 ================= */
+function initCollapse(){
+  const head = $('sizeCardHead'), body = $('sizeCardBody');
+  const apply = v => { body.hidden = !v; head.classList.toggle('closed', !v); };
+  let open = false;   // 默认折叠
+  apply(open);
+  head.onclick = ()=>{ open = !open; apply(open); };
+}
+load();
+bindInputs();
+initCollapse();
+render();
+loadPrinters();
+setInterval(loadQueue, 15000);   // 每 15 秒刷新任务数
+/* 自动化测试钩子 */
+window.__test = {
+  layout: ()=>computeAll(),
+  pdfB64: async ()=>{ const b = await buildPDFBytes();
+    return bytesToB64(new Uint8Array(await b.arrayBuffer())); },
+  printPayload: ()=>({printer: $('printerSel').value, ...resolvePrintOptions()})
+};
+</script>
+</body>
+</html>
