@@ -17,6 +17,8 @@ import re
 import subprocess
 import tempfile
 import time as _time
+import urllib.parse
+import urllib.request
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -196,6 +198,47 @@ def record_job_label(printer, lp_output, title):
     return m.group(1)
 
 
+GEO_CACHE = {}
+
+def geocode_place(lat, lon):
+    """GPS 坐标 → 地名（OpenStreetMap 逆地理编码，无密钥）。
+    有地标名返回「区·地标」，否则返回区/县级地名；失败返回空串。"""
+    key = (round(lat, 3), round(lon, 3))   # ~110m 精度缓存
+    if key in GEO_CACHE:
+        return GEO_CACHE[key]
+    q = urllib.parse.urlencode({"format": "jsonv2", "lat": lat, "lon": lon,
+                                "zoom": 17, "accept-language": "zh"})
+    url = "https://nominatim.openstreetmap.org/reverse?" + q
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "photo-layout-printer/1.0 (personal local tool)"})
+    place = ""
+    try:
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        addr = data.get("address", {})
+        name = data.get("name") or addr.get("park") or ""
+        if name and not re.search(r"[\u4e00-\u9fff]", name):
+            name = ""     # OSM 里的拉丁名（如 Dufuchi Hutong）对中文打印没用
+        district = addr.get("city") or addr.get("town") or addr.get("county") or ""
+        # 从 display_name 提取省/直辖市前缀（如「北京市」）
+        parts = [p.strip() for p in data.get("display_name", "").split(",")]
+        prov = ""
+        if district and district in parts:
+            i = parts.index(district)
+            if i + 1 < len(parts):
+                prov = parts[i + 1]
+        if name:
+            place = ((prov + district + "·") if district and district not in name else "") + name
+        else:
+            place = (prov + district) if district else (data.get("display_name", "").split(",")[0].strip())
+        place = place.strip()[:60]
+    except Exception as e:
+        place = ""
+        GEO_CACHE["__err__" + str(key)] = str(e)[:80]
+    GEO_CACHE[key] = place
+    return place
+
+
 def queue_jobs(printer):
     """列出某打印机当前未完成的任务，附文件名与状态"""
     cmd = ["lpstat", "-o"] + ([printer] if printer else [])
@@ -284,6 +327,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(500, json.dumps({"error": str(e)}).encode())
         elif self.path == "/api/printers":
             self._send(200, json.dumps(list_printers()).encode())
+        elif self.path.startswith("/api/geocode"):
+            q = parse_qs(urlparse(self.path).query)
+            try:
+                lat = float(q.get("lat", ["0"])[0]); lon = float(q.get("lon", ["0"])[0])
+                self._send(200, json.dumps({"place": geocode_place(lat, lon)}).encode())
+            except Exception as e:
+                self._send(200, json.dumps({"place": "", "error": str(e)[:80]}).encode())
         elif self.path.startswith("/api/queue"):
             q = parse_qs(urlparse(self.path).query)
             p = (q.get("printer") or [""])[0]
