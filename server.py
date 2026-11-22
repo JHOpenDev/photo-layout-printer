@@ -216,22 +216,36 @@ def geocode_place(lat, lon):
         with urllib.request.urlopen(req, timeout=8) as r:
             data = json.loads(r.read().decode("utf-8"))
         addr = data.get("address", {})
-        name = data.get("name") or addr.get("park") or ""
-        if name and not re.search(r"[\u4e00-\u9fff]", name):
-            name = ""     # OSM 里的拉丁名（如 Dufuchi Hutong）对中文打印没用
-        district = addr.get("city") or addr.get("town") or addr.get("county") or ""
-        # 从 display_name 提取省/直辖市前缀（如「北京市」）
-        parts = [p.strip() for p in data.get("display_name", "").split(",")]
-        prov = ""
-        if district and district in parts:
-            i = parts.index(district)
-            if i + 1 < len(parts):
-                prov = parts[i + 1]
-        if name:
-            place = ((prov + district + "·") if district and district not in name else "") + name
-        else:
-            place = (prov + district) if district else (data.get("display_name", "").split(",")[0].strip())
-        place = place.strip()[:60]
+        display = [p.strip() for p in data.get("display_name", "").split(",")]
+
+        def short(s, suffixes):
+            s = (s or "").strip()
+            for suf in suffixes:
+                if s.endswith(suf) and len(s) > len(suf):
+                    return s[:-len(suf)]
+            return s
+
+        # 省级：优先 address.state；直辖市（北京/上海等）从 display_name 里找「xx市」
+        prov = short(addr.get("state"), ("省", "自治区", "市"))
+        if not prov:
+            for p in display:
+                if p.endswith("市") and len(p) >= 3:
+                    prov = short(p, ("市",))
+                    break
+        dist = short(addr.get("city") or addr.get("town") or addr.get("county"),
+                     ("市", "区", "县", "旗"))
+        town = short(addr.get("town") or addr.get("suburb") or addr.get("city_district")
+                     or addr.get("quarter"), ("镇", "乡", "街道", "社区"))
+        poi = data.get("name") or addr.get("park") or ""
+        if poi and not re.search(r"[\u4e00-\u9fff]", poi):
+            poi = ""     # OSM 里的拉丁名（如 Dufuchi Hutong）对中文打印没用
+        parts = []
+        for p in (prov, dist, town):
+            if p and (not parts or parts[-1] != p):
+                parts.append(p)
+        if poi and poi not in "/".join(parts) and len(parts) < 3:
+            parts.append(poi)   # 没有镇级信息时用地标名补足
+        place = "·".join(parts).strip("·")[:60]
     except Exception as e:
         place = ""
         GEO_CACHE["__err__" + str(key)] = str(e)[:80]
