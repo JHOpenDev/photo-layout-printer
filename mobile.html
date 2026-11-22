@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>照片打印 · 6寸</title>
+<style>
+:root{--acc:#2563eb;--line:#e3e6ea;--sub:#6b7280;--ok:#15803d;--err:#dc2626}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:15px/1.5 -apple-system,"PingFang SC",sans-serif;background:#eef0f3;color:#1d2129;padding:12px;padding-bottom:16px}
+header{text-align:center;padding:4px 0 10px}
+header h1{font-size:19px;font-weight:700}
+header p{font-size:12px;color:var(--sub);margin-top:2px}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+h2{font-size:13px;color:var(--sub);margin-bottom:10px;font-weight:600}
+#dropZone{border:1.5px dashed #c4c9d1;border-radius:12px;padding:26px 10px;text-align:center;color:var(--sub);font-size:15px;cursor:pointer}
+#dropZone:active{background:#eff6ff}
+#dropZone b{color:var(--acc);font-weight:500}
+#fileInput{display:none}
+#thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px;margin-top:12px}
+#thumbs .t{position:relative;border-radius:9px;overflow:hidden;background:#f0f1f3;aspect-ratio:1}
+#thumbs img{width:100%;height:100%;object-fit:cover;display:block}
+#thumbs .rm{position:absolute;top:3px;right:3px;width:22px;height:22px;border:none;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:13px;line-height:21px;text-align:center;padding:0}
+#thumbs .exifline{position:absolute;left:0;right:0;bottom:0;font-size:9px;background:rgba(0,0,0,.45);color:#fff;padding:2px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
+#summary{font-size:13px;color:#374151;margin:10px 0;text-align:center}
+.chk{display:flex;align-items:center;gap:8px;font-size:14px;margin-top:12px}
+.chk input{width:18px;height:18px;accent-color:var(--acc)}
+.hint{font-size:11.5px;color:var(--sub);margin-top:8px;line-height:1.5}
+.btn{width:100%;padding:14px;border-radius:13px;border:none;background:var(--acc);color:#fff;font-size:17px;font-weight:600;cursor:pointer;margin-top:12px}
+.btn:active{opacity:.85}
+.btn:disabled{opacity:.4}
+.btn.gray{background:#fff;border:1px solid var(--line);color:#1d2129;font-size:14px;font-weight:400;padding:11px}
+#qBtn{white-space:nowrap;display:flex;align-items:center;justify-content:center}
+#cancelAll{white-space:nowrap}
+.btn.red{background:#fff;border:1px solid #fecaca;color:#dc2626;font-size:14px;font-weight:500;padding:10px}
+#status{font-size:12.5px;margin-top:10px;min-height:18px;color:var(--sub);word-break:break-all}
+#status.ok{color:var(--ok)}
+#status.err{color:var(--err)}
+#printerInfo{font-size:12px;color:var(--sub);text-align:center}
+#queueBox{margin-top:10px;display:none}
+#queueBox .job{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:7px 0;border-top:1px solid #f0f1f3;color:#374151}
+#queueBox .job .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#queueBox .job .c{color:#dc2626;border:none;background:#fef2f2;border-radius:6px;padding:4px 10px;font-size:12px;flex:none}
+#queueBox .empty{font-size:12.5px;color:var(--sub);text-align:center;padding:8px 0}
+</style>
+</head>
+<body>
+<header><h1>照片打印 · 6寸</h1><p>手机选照片，自动排两张一张 6寸 相纸</p></header>
+
+<div class="card">
+  <h2>照片</h2>
+  <div id="dropZone">点这里从相册选照片<br><b>可一次多选 · 每张打 1 份</b></div>
+  <input type="file" id="fileInput" accept="image/*" multiple>
+  <div id="thumbs"></div>
+  <div class="hint">照片会自动排满 6寸 相纸（贴边、两张一格一纸），多张自动分页。</div>
+</div>
+
+<div class="card">
+  <h2>预览</h2>
+  <div id="summary">还没有照片</div>
+  <canvas id="cv"></canvas>
+  <label class="chk"><input type="checkbox" id="stampChk" checked> 在照片上打印拍摄信息（时间/地点）</label>
+</div>
+
+<div class="card">
+  <h2>打印</h2>
+  <div id="printerInfo">正在获取打印机…</div>
+  <div id="qbar" style="display:flex;gap:8px;margin-top:10px">
+    <button class="btn gray" id="qBtn" style="margin:0">📋 待打印任务 0</button>
+    <button class="btn red" id="cancelAll" style="margin:0;flex:none">一键取消全部</button>
+  </div>
+  <div id="queueBox"></div>
+  <button class="btn" id="btnPrint">🖨 直接打印</button>
+  <button class="btn gray" id="btnDownload">⬇ 下载 PDF</button>
+  <div id="status"></div>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const MM2PT = 72/25.4;
+const PAPER = {w:102, h:152};          // 6寸 相纸（竖向）
+const GAP = 2;                          // 两张之间的下刀缝
+let S = { photos: [], stampInfo: true, fill: "cover" };
+let printerCaps = { pagesizes: [], printer: "" };
+
+/* ================= EXIF（时间/地点） ================= */
+function fmtExifDate(dt){ return (dt||"").slice(0,16).replace(/^(\d{4}):(\d{2}):(\d{2})/, "$1-$2-$3"); }
+function fmtExifLoc(ex){
+  if (ex.place) return "📍 " + ex.place;
+  if (ex.lat !== null && ex.lat !== undefined)
+    return "📍 " + Math.abs(ex.lat).toFixed(4) + "°" + (ex.lat>=0?"N":"S") + " " +
+           Math.abs(ex.lon).toFixed(4) + "°" + (ex.lon>=0?"E":"W");
+  return "";
+}
+function fmtExif(ex){
+  if (!ex) return "";
+  const parts = [];
+  const hasAddr = !!ex.place || (ex.lat !== null && ex.lat !== undefined);
+  if (ex.dt) parts.push("📅 " + fmtExifDate(ex.dt).slice(0, hasAddr ? 16 : 10));
+  const loc = fmtExifLoc(ex);
+  if (loc) parts.push(loc);
+  return parts.join(" · ");
+}
+function parseExif(bytes){
+  try{
+    let pos = 2, tiff = null;
+    while (pos + 4 <= bytes.length){
+      if (bytes[pos] !== 0xFF) return null;
+      const marker = bytes[pos+1];
+      if (marker === 0xFF){ pos++; continue; }
+      if (marker === 0xD8 || (marker >= 0xD0 && marker <= 0xD9) || marker === 0x01){ pos += 2; continue; }
+      if (marker === 0xDA) return null;
+      const len = (bytes[pos+2] << 8) | bytes[pos+3];
+      if (marker === 0xE1 && bytes[pos+4]===0x45 && bytes[pos+5]===0x78 && bytes[pos+6]===0x69 && bytes[pos+7]===0x66 && bytes[pos+8]===0x00){
+        tiff = bytes.subarray(pos+10, pos+2+len); break;
+      }
+      pos += 2 + len;
+    }
+    if (!tiff || tiff.length < 8) return null;
+    const dv = new DataView(tiff.buffer, tiff.byteOffset, tiff.byteLength);
+    const le = dv.getUint16(0, false) === 0x4949;
+    const u16 = o => dv.getUint16(o, le), u32 = o => dv.getUint32(o, le);
+    function ifdEntries(off){
+      const n = u16(off), e = {};
+      for (let i = 0; i < n; i++){
+        const en = off + 2 + i*12;
+        const t = u16(en), vt = u16(en+2), cnt = u32(en+4);
+        const sz = ({1:1,2:1,3:2,4:4,5:8,7:1,9:4,10:8}[vt]||1) * cnt;
+        let vo = en + 8;
+        if (sz > 4) vo = u32(en+8);
+        e[t] = {vt, cnt, vo};
+      }
+      return e;
+    }
+    const ifd0 = ifdEntries(u32(4));
+    const exifIfd = ifd0[0x8769] ? ifdEntries(u32(ifd0[0x8769].vo)) : null;
+    let dt = null;
+    if (exifIfd && exifIfd[0x9003]){
+      const en = exifIfd[0x9003];
+      dt = new TextDecoder("latin1").decode(tiff.subarray(en.vo, en.vo + en.cnt)).replace(/\0/g, "").trim();
+    }
+    let lat = null, lon = null;
+    const gpsIfd = ifd0[0x8825] ? ifdEntries(u32(ifd0[0x8825].vo)) : null;
+    if (gpsIfd && gpsIfd[0x0002] && gpsIfd[0x0004]){
+      const rat = en => { const v = []; for (let i = 0; i < en.cnt; i++){ const vo = en.vo + i*8; v.push(u32(vo) / (u32(vo+4) || 1)); } return v; };
+      const dms2deg = (dms, ref) => { const d = rat(dms); const deg = d[0] + (d[1]||0)/60 + (d[2]||0)/3600; return (ref==="S"||ref==="W") ? -deg : deg; };
+      const latRef = gpsIfd[0x0001] ? String.fromCharCode(tiff[gpsIfd[0x0001].vo]) : "N";
+      const lonRef = gpsIfd[0x0003] ? String.fromCharCode(tiff[gpsIfd[0x0003].vo]) : "E";
+      lat = dms2deg(gpsIfd[0x0002], latRef);
+      lon = dms2deg(gpsIfd[0x0004], lonRef);
+    }
+    if (!dt && lat === null) return null;
+    return { dt, lat, lon };
+  }catch(e){ return null; }
+}
+
+/* ================= 照片管理 ================= */
+function checkFileComplete(buf){
+  const n = buf.length;
+  if (n < 64) return false;
+  if (buf[0]===0xFF && buf[1]===0xD8){
+    for (let i = n-1; i >= Math.max(1, n-16); i--)
+      if (buf[i]===0xD9 && buf[i-1]===0xFF) return true;
+    return false;
+  }
+  if (buf[0]===0x89 && buf[1]===0x50){
+    return new TextDecoder("latin1").decode(buf.subarray(Math.max(0, n-16))).includes("IEND");
+  }
+  return true;
+}
+async function addPhotos(files){
+  const imgs = Array.from(files).filter(f=>f.type.startsWith("image/"));
+  if (!imgs.length) return;
+  const bad = [];
+  for (const f of imgs){
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    if (!(await (async()=>checkFileComplete(bytes))())){ bad.push(f.name); continue; }
+    const exif = parseExif(bytes);
+    await new Promise(res=>{
+      const url = URL.createObjectURL(f);
+      const img = new Image();
+      img.onload = ()=>{ S.photos.push({id:crypto.randomUUID(), name:f.name, img, exif}); res(); };
+      img.onerror = ()=>{ setStatus("err", "无法解码：" + f.name); res(); };
+      img.src = url;
+    });
+  }
+  refreshThumbs(); render(); setStatus("", "已添加 " + (S.photos.length) + " 张照片");
+  if (bad.length) setStatus("err", "⚠️ 已跳过不完整的文件：" + bad.join("、") + "（传输中断会打出自影）");
+  geocodeMissing();
+}
+async function geocodeMissing(){
+  for (const p of S.photos){
+    const ex = p.exif;
+    if (!ex || ex.lat === null || ex.lat === undefined || ex.place !== undefined) continue;
+    ex.place = "";
+    try{
+      const r = await fetch("/api/geocode?lat="+ex.lat+"&lon="+ex.lon);
+      const d = await r.json();
+      if (d.place) ex.place = d.place;
+    }catch(e){ /* 无网回退经纬度 */ }
+    refreshThumbs(); render();
+  }
+}
+function rmPhoto(i){ S.photos.splice(i,1); refreshThumbs(); render(); setStatus("", ""); }
+
+/* ================= 排版引擎（固定 6寸 · 两格贴边） ================= */
+function computeAll(){
+  const P = PAPER, gap = GAP;
+  let a = 1.5;
+  if (S.photos.length){
+    const im = S.photos[0].img;
+    a = (im.naturalWidth||im.width)/(im.naturalHeight||im.height);
+  }
+  if (!isFinite(a) || a <= 0) a = 1.5;
+  // 两种格子形状 × 正放/旋转，取能印得更大的
+  const grids = [
+    {cols:1, rows:2, cw:P.w,      ch:(P.h-gap)/2},
+    {cols:2, rows:1, cw:(P.w-gap)/2, ch:P.h},
+  ];
+  let best = null;
+  for (const g of grids){
+    for (const sa of [a, 1/a]){
+      const w = Math.min(g.cw, g.ch*sa), h = w/sa;
+      if (w < 5 || h < 5) continue;
+      if (!best || w*h > best.area) best = {g, w, h, area:w*h, sa};
+    }
+  }
+  if (!best) return null;
+  const cw = best.g.cw, ch = best.g.ch;
+  const x0 = (P.w - cw)/2, y0 = (P.h - 2*ch - gap)/2;
+  const base = [
+    {x:x0,          y:y0,          w:best.w, h:best.h},
+    {x:x0,          y:y0+ch+gap,   w:best.w, h:best.h},
+  ];
+  const q = S.photos;
+  const nsheets = Math.max(1, Math.ceil(Math.max(q.length,1)/2));
+  const sheets = [];
+  for (let i=0;i<nsheets;i++)
+    sheets.push(base.map((sl,j)=>({...sl, photo:q[i*2+j]||null})));
+  return {paper:P, sheets, per:2, used:q.length, slotW:best.w, slotH:best.h, rotC: best.sa !== a};
+}
+/* 把图片 cover/contain 填进矩形 */
+function drawFit(ctx, img, x, y, w, h, rot, mode){
+  const iw = img.naturalWidth||img.width, ih = img.naturalHeight||img.height;
+  let sc;
+  if (rot) sc = mode==="cover" ? Math.max(w/ih, h/iw) : Math.min(w/ih, h/iw);
+  else     sc = mode==="cover" ? Math.max(w/iw, h/ih) : Math.min(w/iw, h/ih);
+  const a = iw*sc, b = ih*sc;
+  ctx.save();
+  ctx.translate(x+w/2, y+h/2);
+  if (rot) ctx.rotate(Math.PI/2);
+  ctx.drawImage(img, -a/2, -b/2, a, b);
+  ctx.restore();
+}
+/* 照片右下角盖拍摄信息（白描边，随内容方向） */
+function drawStamp(ctx, x, y, w, h, rot, exif, k, img){
+  if (!exif) return;
+  const parts = [];
+  if (exif.place) parts.push(exif.place);
+  else if (exif.lat !== null && exif.lat !== undefined)
+    parts.push("北纬 " + Math.abs(exif.lat).toFixed(4) + "° · 东经 " + Math.abs(exif.lon).toFixed(4) + "°");
+  if (exif.dt) parts.push("拍摄于 " + fmtExifDate(exif.dt));
+  if (!parts.length) return;
+  ctx.save();
+  ctx.translate(x + w/2, y + h/2);
+  if (rot) ctx.rotate(Math.PI/2);
+  const bu = rot ? h/2 : w/2, bv = rot ? w/2 : h/2;
+  const pad = 2.5*k, fs = Math.min(3.4, w/14, h/14)*k, lh = fs*1.3;
+  ctx.font = fs + 'px -apple-system, "PingFang SC", sans-serif';
+  ctx.textBaseline = "top"; ctx.textAlign = "right";
+  ctx.lineWidth = Math.max(1, 0.55*k); ctx.strokeStyle = "rgba(255,255,255,0.92)";
+  ctx.lineJoin = "round";
+  const vvLast = bv - pad - fs;
+  let vv = vvLast - (parts.length - 1) * lh;
+  for (const t of parts){
+    ctx.strokeText(t, bu - pad, vv);
+    ctx.fillStyle = "#1a1a1a";
+    ctx.fillText(t, bu - pad, vv);
+    vv += lh;
+  }
+  ctx.restore();
+}
+
+/* ================= 预览 ================= */
+function render(){
+  const L = computeAll();
+  const cv = $("cv");
+  if (!L){ cv.style.display = "none"; $("summary").textContent = "还没有照片"; return; }
+  $("summary").innerHTML = "纸张 <b>"+L.paper.w+"×"+L.paper.h+"mm</b> · 每张 <b>2</b> 格 · 已排 <b>"+L.used+"</b> 张 · 共 <b>"+L.sheets.length+"</b> 张纸";
+  const wrapW = Math.min(document.body.clientWidth - 24, 460);
+  const k = wrapW / (L.paper.w + 12);
+  const pad = 6*k, labelH = 16, gapY = 18;
+  const H = L.paper.h*k + pad*2 + labelH + (L.sheets.length-1)*gapY;
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(wrapW*dpr); cv.height = Math.round(H*dpr);
+  cv.style.width = wrapW+"px"; cv.style.height = H+"px";
+  cv.style.display = "block";
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,wrapW,H);
+  L.sheets.forEach((slots,i)=>{
+    const ox = pad, oy = pad + i*(L.paper.h*k + gapY);
+    ctx.fillStyle = "#8a8f99"; ctx.font = "11px -apple-system"; ctx.textAlign = "left";
+    ctx.fillText("第 " + (i+1) + " 张", ox, oy - 4);
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,.15)"; ctx.shadowBlur = 8; ctx.shadowOffsetY = 2;
+    ctx.fillStyle = "#fff"; ctx.fillRect(ox, oy, L.paper.w*k, L.paper.h*k);
+    ctx.restore();
+    ctx.strokeStyle = "#d8dbe0"; ctx.strokeRect(ox+.5, oy+.5, L.paper.w*k-1, L.paper.h*k-1);
+    for (const s of slots){
+      const X = ox + s.x*k, Y = oy + s.y*k, W = s.w*k, H2 = s.h*k;
+      if (s.photo){
+        ctx.save(); ctx.beginPath(); ctx.rect(X,Y,W,H2); ctx.clip();
+        const rot = s.rotC;
+        drawFit(ctx, s.photo.img, X, Y, W, H2, rot, S.fill);
+        if (S.stampInfo) drawStamp(ctx, X, Y, W, H2, rot, s.photo.exif, k, s.photo.img);
+        ctx.restore();
+      }
+    }
+    // 两格交界虚线
+    ctx.save();
+    ctx.strokeStyle = "#c9ccd1"; ctx.lineWidth = 1; ctx.setLineDash([5,3]);
+    ctx.beginPath();
+    ctx.moveTo(ox, oy + (slots[0].y + slots[0].h)*k);
+    ctx.lineTo(ox + L.paper.w*k, oy + (slots[0].y + slots[0].h)*k);
+    ctx.stroke(); ctx.restore();
+  });
+}
+
+/* ================= PDF 生成 ================= */
+function num(v){ return String(Math.round(v*100)/100); }
+function bytesToB64(bytes){
+  let bin = ""; const CH = 0x8000;
+  for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i+CH));
+  return btoa(bin);
+}
+function rasterizeSlot(img, wMM, hMM, rot, exif){
+  const dpi = 300;
+  const tw = Math.max(16, Math.round(wMM/25.4*dpi));
+  const th = Math.max(16, Math.round(hMM/25.4*dpi));
+  const c = document.createElement("canvas"); c.width = tw; c.height = th;
+  const x = c.getContext("2d");
+  x.fillStyle = "#ffffff"; x.fillRect(0, 0, tw, th);
+  drawFit(x, img, 0, 0, tw, th, rot, S.fill);
+  if (S.stampInfo) drawStamp(x, 0, 0, tw, th, rot, exif, dpi/25.4, img);
+  return new Promise(res=>c.toBlob(b=>res(b), "image/jpeg", 0.92));
+}
+async function buildPDFBytes(){
+  const L = computeAll();
+  if (!L) throw new Error("还没有照片");
+  const k = MM2PT;
+  const PW = num(L.paper.w*k), PH = num(L.paper.h*k);
+  const images = [], keyMap = new Map();
+  const sheetItems = [];
+  for (const slots of L.sheets){
+    const items = [];
+    for (const s of slots){
+      if (!s.photo) continue;
+      const rot = s.rotC;
+      const tw = Math.max(16, Math.round(s.w/25.4*300));
+      const th = Math.max(16, Math.round(s.h/25.4*300));
+      const key = s.photo.id+"#"+tw+"x"+th;
+      let idx = keyMap.get(key);
+      if (idx === undefined){
+        const blob = await rasterizeSlot(s.photo.img, s.w, s.h, rot, s.photo.exif);
+        const buf = new Uint8Array(await blob.arrayBuffer());
+        idx = images.length; images.push({w:tw, h:th, bytes:buf});
+        keyMap.set(key, idx);
+      }
+      items.push({s, idx});
+    }
+    sheetItems.push(items);
+  }
+  const enc = new TextEncoder();
+  const chunks = []; let pos = 0;
+  const put = b=>{ chunks.push(b); pos += b.length; };
+  const putS = t=>put(enc.encode(t));
+  const offs = [];
+  put(new Uint8Array([0x25,0x50,0x44,0x46,0x2d,0x31,0x2e,0x34,0x0a,0x25,0xe2,0xe3,0xcf,0xd3,0x0a]));
+  function obj(n, s){ offs[n] = pos; putS(n+" 0 obj\n"+s+"\nendobj\n"); }
+  function streamObj(n, dict, bytes){ offs[n] = pos; putS(n+" 0 obj\n"+dict+"\nstream\n"); put(bytes); putS("\nendstream\nendobj\n"); }
+  const nS = sheetItems.length, firstImg = 3 + 2*nS;
+  obj(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  obj(2, "<< /Type /Pages /Kids ["+sheetItems.map((_,i)=>(3+2*i)+" 0 R").join(" ")+"] /Count "+nS+" >>");
+  sheetItems.forEach((items,i)=>{
+    const xo = items.map(it=>" /Im"+it.idx+" "+(firstImg+it.idx)+" 0 R").join("");
+    obj(3+2*i, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 "+PW+" "+PH+
+               "] /Resources << /XObject <<"+xo+" >> >> /Contents "+(4+2*i)+" 0 R >>");
+    const lines = ["q"];
+    for (const {s, idx} of items){
+      const x1 = Math.max(0, s.x), y1 = Math.max(0, s.y);
+      const W = num((Math.min(L.paper.w, s.x+s.w)-x1)*k), H = num((Math.min(L.paper.h, s.y+s.h)-y1)*k);
+      lines.push("q", W+" 0 0 "+H+" "+num(x1*k)+" "+num(PH-(s.y+s.h)*k)+" cm", "/Im"+idx+" Do", "Q");
+    }
+    lines.push("Q");
+    const cs = lines.join("\n");
+    streamObj(4+2*i, "<< /Length "+enc.encode(cs).length+" >>", enc.encode(cs));
+  });
+  images.forEach((im,j)=>{
+    streamObj(firstImg+j,
+      "<< /Type /XObject /Subtype /Image /Width "+im.w+" /Height "+im.h+
+      " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "+im.bytes.length+" >>",
+      im.bytes);
+  });
+  const total = 3 + 2*nS + images.length;
+  const xrefPos = pos;
+  let xref = "xref\n0 "+total+"\n0000000000 65535 f \n";
+  for (let nn=1; nn<total; nn++) xref += String(offs[nn]).padStart(10,"0")+" 00000 n \n";
+  putS(xref);
+  putS("trailer\n<< /Size "+total+" /Root 1 0 R >>\nstartxref\n"+xrefPos+"\n%%EOF\n");
+  return new Blob(chunks, {type:"application/pdf"});
+}
+
+/* ================= 打印机对接 ================= */
+let serviceOK = false;
+let detected = {printer:"", media:"", mediatype:""};
+function setStatus(cls, msg){ const el = $("status"); el.className = cls; el.textContent = msg; }
+const SIZE_PRI = [/^4x6\.fullbleed$/i, /^4x6$/i, /4x6|6x4|10x15|102x152|om4x6/i, /100x150/i];
+const PHOTO_RE = /photo|photographic|gloss|相|照片|光面|premium/i;
+async function initPrinter(){
+  try{
+    const pr = await (await fetch("/api/printers")).json();
+    const pick = (pr.printers.find(p=>/hp|惠普/i.test(p.name)) || {}).name ||
+                 (pr.printers.some(p=>p.name===pr.default) ? pr.default : (pr.printers[0]||{}).name) || "";
+    detected.printer = pick;
+    $("printerInfo").textContent = "打印机：" + (pick ? (pick.length > 26 ? pick.slice(0,26)+"…" : pick) : "未检测到");
+    if (!pick){ $("btnPrint").disabled = true; return; }
+    const op = await (await fetch("/api/options?printer="+encodeURIComponent(pick))).json();
+    const ps = (op.pagesize||{});
+    detected.media = SIZE_PRI.map(rx=>(ps.choices||[]).find(c=>rx.test(c))).find(Boolean) || "";
+    const mt = (op.mediatype||{});
+    detected.mediatype = (mt.choices||[]).find(c=>PHOTO_RE.test(c)) || "";
+    $("btnPrint").disabled = false;
+    setStatus("ok", "✔ 打印服务已连接");
+  }catch(e){
+    $("btnPrint").disabled = true;
+    setStatus("err", "⚠️ 打印服务未连接（下载 PDF 仍可用）");
+  }
+  loadQueue();
+}
+function makeTitle(){
+  const names = [];
+  for (const p of S.photos) if (!names.includes(p.name)) names.push(p.name);
+  return names.length ? names.slice(0,2).join("、") + (names.length>2 ? " 等"+names.length+"个文件" : "") : "手机照片打印";
+}
+async function doPrint(){
+  if (!detected.printer){ setStatus("err", "未检测到打印机"); return; }
+  if (!S.photos.length){ setStatus("err", "请先添加照片"); return; }
+  setStatus("", "正在生成 PDF…");
+  let blob;
+  try{ blob = await buildPDFBytes(); }
+  catch(e){ setStatus("err", "✕ " + e.message); return; }
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  setStatus("", "正在发送到打印机…（" + S.photos.length + " 张照片）");
+  try{
+    const r = await fetch("/api/print", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({pdf: bytesToB64(buf), printer: detected.printer,
+        copies: 1, media: detected.media, mediatype: detected.mediatype,
+        mediatype_name: "MediaType", quality: true, fit: true, title: makeTitle()})});
+    const d = await r.json();
+    setStatus(d.ok ? "ok" : "err", (d.ok ? "✔ " : "✕ ") + (d.ok ? "已发送，共 " + S.photos.length + " 张照片" : (d.error||"打印失败")));
+    if (d.ok) loadQueue();
+  }catch(e){ setStatus("err", "✕ 发送失败：" + e.message); }
+}
+async function doDownload(){
+  if (!S.photos.length){ setStatus("err", "请先添加照片"); return; }
+  let blob;
+  try{ blob = await buildPDFBytes(); }
+  catch(e){ setStatus("err", "✕ " + e.message); return; }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "手机照片_6寸_" + S.photos.length + "张.pdf";
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+  setStatus("ok", "✔ PDF 已下载（可发给别人代打）");
+}
+
+/* ================= 打印队列 ================= */
+let queueOpen = false;
+async function loadQueue(){
+  if (!detected.printer) return;
+  let jobs = [];
+  try{ jobs = (await (await fetch("/api/queue?printer="+encodeURIComponent(detected.printer))).json()).jobs || []; }
+  catch(e){ return; }
+  $("qBtn").textContent = "📋 待打印 " + jobs.length + (jobs.length ? " ⚠️" : "");
+  const box = $("queueBox");
+  if (!queueOpen){ box.style.display = "none"; return; }
+  box.style.display = "block";
+  box.innerHTML = jobs.length
+    ? jobs.map(j=>'<div class="job"><span class="n">#'+j.job+' · '+(j.name||'（未记录）')+'</span><button class="c" data-job="'+j.job+'">取消</button></div>').join("")
+    : '<div class="empty">✔ 队列是空的</div>';
+  box.querySelectorAll("button[data-job]").forEach(b=> b.onclick = ()=>cancelJob(+b.dataset.job));
+}
+async function cancelJob(job){
+  try{
+    await fetch("/api/cancel", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({printer: detected.printer, job})});
+  }catch(e){}
+  loadQueue();
+}
+
+/* ================= 界面绑定 ================= */
+function refreshThumbs(){
+  const box = $("thumbs");
+  box.innerHTML = "";
+  S.photos.forEach((p, i)=>{
+    const d = document.createElement("div"); d.className = "t";
+    d.innerHTML = '<img src="'+p.img.src+'">' +
+      (fmtExif(p.exif) ? '<div class="exifline">'+fmtExif(p.exif)+'</div>' : '') +
+      '<button class="rm">✕</button>';
+    d.querySelector(".rm").onclick = ()=>rmPhoto(i);
+    box.appendChild(d);
+  });
+}
+function bindUI(){
+  const dz = $("dropZone"), fi = $("fileInput");
+  dz.onclick = ()=>fi.click();
+  fi.onchange = ()=>{ addPhotos(fi.files); fi.value = ""; };
+  ["dragover","dragenter"].forEach(ev=>dz.addEventListener(ev, e=>e.preventDefault()));
+  dz.addEventListener("drop", e=>{ e.preventDefault(); addPhotos(e.dataTransfer.files); });
+  $("stampChk").onchange = e=>{ S.stampInfo = e.target.checked; render(); };
+  $("qBtn").onclick = ()=>{ queueOpen = !queueOpen; loadQueue(); };
+  $("cancelAll").onclick = async ()=>{
+    try{ await fetch("/api/cancel", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({printer: detected.printer})}); }catch(e){}
+    setStatus("ok", "✔ 已取消全部任务"); loadQueue();
+  };
+  $("btnPrint").onclick = doPrint;
+  $("btnDownload").onclick = doDownload;
+  window.addEventListener("resize", render);
+}
+function setStatus(cls, msg){ const el = $("status"); el.className = cls; el.textContent = msg; }
+
+/* ================= 启动 ================= */
+bindUI();
+render();
+initPrinter();
+setInterval(loadQueue, 15000);
+</script>
+</body>
+</html>

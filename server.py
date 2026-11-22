@@ -343,7 +343,13 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        if self.path in ("/", "/index.html"):
+        if self.path in ("/m", "/mobile", "/mobile.html"):
+            try:
+                with open(os.path.join(ROOT, "mobile.html"), "rb") as f:
+                    self._send(200, f.read(), "text/html; charset=utf-8")
+            except OSError as e:
+                self._send(500, json.dumps({"error": str(e)}).encode())
+        elif self.path in ("/", "/index.html"):
             try:
                 with open(os.path.join(ROOT, "index.html"), "rb") as f:
                     self._send(200, f.read(), "text/html; charset=utf-8")
@@ -392,8 +398,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    # 绑定 0.0.0.0：手机在同一 WiFi 下可通过 http://电脑IP:8791/m 访问手机版
     try:
-        srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+        srv = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     except OSError:
         print("端口 %d 已被占用，服务可能已在运行，直接打开浏览器即可：" % PORT)
         print("  http://127.0.0.1:%d" % PORT)
