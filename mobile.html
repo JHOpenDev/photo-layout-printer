@@ -31,8 +31,9 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
 .btn:active{opacity:.85}
 .btn:disabled{opacity:.4}
 .btn.gray{background:#fff;border:1px solid var(--line);color:#1d2129;font-size:14px;font-weight:400;padding:11px}
-#qBtn{white-space:nowrap;display:flex;align-items:center;justify-content:center}
-#cancelAll{white-space:nowrap}
+#qbar{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}
+#qBtn{flex:1 1 auto;width:auto;min-width:0;white-space:nowrap;padding:9px;font-size:13px;display:flex;align-items:center;justify-content:center}
+#cancelAll{flex:0 0 auto;width:auto;padding:9px 12px;font-size:13px;white-space:nowrap}
 .btn.red{background:#fff;border:1px solid #fecaca;color:#dc2626;font-size:14px;font-weight:500;padding:10px}
 #status{font-size:12.5px;margin-top:10px;min-height:18px;color:var(--sub);word-break:break-all}
 #status.ok{color:var(--ok)}
@@ -69,7 +70,7 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
   <div id="printerInfo">正在获取打印机…</div>
   <div id="qbar" style="display:flex;gap:8px;margin-top:10px">
     <button class="btn gray" id="qBtn" style="margin:0">📋 待打印任务 0</button>
-    <button class="btn red" id="cancelAll" style="margin:0;flex:none">一键取消全部</button>
+    <button class="btn red" id="cancelAll" style="margin:0;flex:none">取消全部</button>
   </div>
   <div id="queueBox"></div>
   <button class="btn" id="btnPrint">打印</button>
