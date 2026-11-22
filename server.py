@@ -248,10 +248,10 @@ def geocode_place(lat, lon):
         # 小区级：residential/neighbourhood 字段（如「天通苑」「XX小区」）
         resi = short(addr.get("residential") or addr.get("neighbourhood"), ("小区",))
         parts = []
-        for p in (prov, dist, town):
+        for p in (prov, dist):
             if p and (not parts or parts[-1] != p):
                 parts.append(p)
-        # 最末级：小区名 > 匹配对象名（楼/碑/学校等）> 路名
+        # 末级：小区名 > 匹配对象名（楼/碑/学校等）> 路名（镇/街道名不显示）
         specific = resi or poi or road or ""
         if specific and zh(specific) and (not parts or parts[-1] != specific):
             parts.append(specific)
