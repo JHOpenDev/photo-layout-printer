@@ -138,10 +138,10 @@ function parseExif(bytes){
     const ifd0 = ifdEntries(u32(4));
     const exifIfd = ifd0[0x8769] ? ifdEntries(u32(ifd0[0x8769].vo)) : null;
     let dt = null;
-    if (exifIfd && exifIfd[0x9003]){
-      const en = exifIfd[0x9003];
-      dt = new TextDecoder("latin1").decode(tiff.subarray(en.vo, en.vo + en.cnt)).replace(/\0/g, "").trim();
-    }
+    const readAscii = en => new TextDecoder("latin1").decode(tiff.subarray(en.vo, en.vo + en.cnt)).replace(/\0/g, "").trim();
+    if (exifIfd && exifIfd[0x9003])      dt = readAscii(exifIfd[0x9003]);   // 拍摄时间
+    else if (exifIfd && exifIfd[0x9004]) dt = readAscii(exifIfd[0x9004]);   // 数字化时间
+    else if (ifd0[0x0132])               dt = readAscii(ifd0[0x0132]);      // 通用时间
     let lat = null, lon = null;
     const gpsIfd = ifd0[0x8825] ? ifdEntries(u32(ifd0[0x8825].vo)) : null;
     if (gpsIfd && gpsIfd[0x0002] && gpsIfd[0x0004]){
