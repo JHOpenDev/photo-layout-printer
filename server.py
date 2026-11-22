@@ -240,11 +240,13 @@ def geocode_place(lat, lon):
         if poi and not re.search(r"[\u4e00-\u9fff]", poi):
             poi = ""     # OSM 里的拉丁名（如 Dufuchi Hutong）对中文打印没用
         parts = []
-        for p in (prov, dist, town):
+        for p in (prov, dist):
             if p and (not parts or parts[-1] != p):
                 parts.append(p)
-        if poi and poi not in "/".join(parts) and len(parts) < 3:
-            parts.append(poi)   # 没有镇级信息时用地标名补足
+        # 第三级：路名/地标名（最精确）优先，没有再退到镇/街道名
+        third = poi if poi else town
+        if third and (not parts or parts[-1] != third):
+            parts.append(third)
         place = "·".join(parts).strip("·")[:60]
     except Exception as e:
         place = ""
