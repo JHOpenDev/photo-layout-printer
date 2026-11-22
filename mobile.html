@@ -34,7 +34,6 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
 .btn.gray{background:#fff;border:1px solid var(--line);color:#1d2129;font-size:14px;font-weight:400;padding:11px}
 #qbar{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}
 #qBtn{flex:1 1 auto;width:auto;min-width:0;white-space:nowrap;padding:9px;font-size:13px;display:flex;align-items:center;justify-content:center}
-#cancelAll{flex:0 0 auto;width:auto;padding:9px 12px;font-size:13px;white-space:nowrap}
 .btn.red{background:#fff;border:1px solid #fecaca;color:#dc2626;font-size:14px;font-weight:500;padding:10px}
 #status{font-size:12.5px;margin-top:10px;min-height:18px;color:var(--sub);word-break:break-all}
 #status.ok{color:var(--ok)}
@@ -71,7 +70,6 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
   <div id="printerInfo">正在获取打印机…</div>
   <div id="qbar" style="display:flex;gap:8px;margin-top:10px">
     <button class="btn gray" id="qBtn" style="margin:0">📋 待打印任务 0</button>
-    <button class="btn red" id="cancelAll" style="margin:0;flex:none">取消全部</button>
   </div>
   <div id="queueBox"></div>
   <button class="btn" id="btnPrint">打印</button>
@@ -491,7 +489,15 @@ async function loadQueue(){
   box.innerHTML = jobs.length
     ? jobs.map(j=>'<div class="job"><span class="n">#'+j.job+' · '+(j.name||'（未记录）')+'</span><button class="c" data-job="'+j.job+'">取消</button></div>').join("")
     : '<div class="empty">✔ 队列是空的</div>';
-  box.innerHTML += '<div style="text-align:right;margin-top:8px"><button class="c" id="resetPrinted" style="color:#6b7280;background:#f0f1f3">重置已打印记录</button></div>';
+  box.innerHTML += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">' +
+    (jobs.length ? '<button class="c" id="cancelAllInPanel" style="color:#fff;background:#dc2626;padding:6px 12px">取消全部</button>' : '<span></span>') +
+    '<button class="c" id="resetPrinted" style="color:#6b7280;background:#f0f1f3">重置已打印记录</button></div>';
+  const ca = box.querySelector("#cancelAllInPanel");
+  if (ca) ca.onclick = async ()=>{
+    try{ await fetch("/api/cancel", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({printer: detected.printer})}); }catch(e){}
+    setStatus("ok", "✔ 已取消全部任务"); loadQueue();
+  };
   const rp = box.querySelector("#resetPrinted");
   if (rp) rp.onclick = ()=>{ if (confirm("确定清除本机的已打印记录吗？（清除后同一张照片可以再次打印）")){ localStorage.removeItem("printedHistory"); S.photos.forEach(p=>p.printed = false); refreshThumbs(); loadQueue(); setStatus("ok", "✔ 已打印记录已清空"); } };
   box.querySelectorAll("button[data-job]").forEach(b=> b.onclick = ()=>cancelJob(+b.dataset.job));
@@ -525,11 +531,6 @@ function bindUI(){
   ["dragover","dragenter"].forEach(ev=>dz.addEventListener(ev, e=>e.preventDefault()));
   dz.addEventListener("drop", e=>{ e.preventDefault(); addPhotos(e.dataTransfer.files); });
   $("qBtn").onclick = ()=>{ queueOpen = !queueOpen; loadQueue(); };
-  $("cancelAll").onclick = async ()=>{
-    try{ await fetch("/api/cancel", {method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({printer: detected.printer})}); }catch(e){}
-    setStatus("ok", "✔ 已取消全部任务"); loadQueue();
-  };
   $("btnPrint").onclick = doPrint;
   window.addEventListener("resize", render);
 }
