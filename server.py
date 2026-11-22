@@ -240,21 +240,21 @@ def geocode_place(lat, lon):
         town = short(addr.get("town") or addr.get("suburb") or addr.get("city_district")
                      or addr.get("quarter"), ("镇", "乡", "街道", "社区"))
         road = addr.get("road") or ""
-        if not re.search(r"[\u4e00-\u9fff]", road):
+        if not zh(road):
             road = ""     # 拉丁路名（如 Dufuchi Hutong）对中文打印没用
         poi = data.get("name") or addr.get("park") or ""
         if not zh(poi) or (addr.get("amenity") and not addr.get("building")):
             poi = ""      # 跳过「麦当劳」式小设施节点与拉丁名——太噪，不可信
+        # 小区级：residential/neighbourhood 字段（如「天通苑」「XX小区」）
+        resi = short(addr.get("residential") or addr.get("neighbourhood"), ("小区",))
         parts = []
-        for p in (prov, dist):
+        for p in (prov, dist, town):
             if p and (not parts or parts[-1] != p):
                 parts.append(p)
-        # 第三级：路名 + 地标/建筑物名（zoom18 能返回 POI），都没有退到镇/街道名
-        third = road or town
-        if poi and poi != road:
-            third = (third + "·" + poi) if third else poi
-        if third and (not parts or parts[-1] != third):
-            parts.append(third)
+        # 最末级：小区名 > 匹配对象名（楼/碑/学校等）> 路名
+        specific = resi or poi or road or ""
+        if specific and zh(specific) and (not parts or parts[-1] != specific):
+            parts.append(specific)
         place = "·".join(parts).strip("·")[:60]
     except Exception as e:
         place = ""
