@@ -51,21 +51,21 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
 </head>
 <body>
 <header><h1>照片打印 · 6寸</h1><p>手机选照片，一张照片打一张 6寸</p></header>
-<div style="text-align:center;font-size:10px;color:#9aa1ab;margin:-4px 0 8px">手机版 v20261127</div>
+<div style="text-align:center;font-size:10px;color:#9aa1ab;margin:-4px 0 8px">手机版 v20261127.1</div>
 
 <div class="card">
   <h2>照片</h2>
   <div id="dropZone">点这里从相册选照片<br><b>可一次多选 · 每张打 1 份</b></div>
   <input type="file" id="fileInput" accept="image/*" multiple>
   <div id="thumbs"></div>
-  <div class="hint">每张照片单独打一张 6寸；横版照片自动转正打印，成品即横版 6寸。「满幅无边」会裁掉少量边缘，「完整留白」整张照片都在纸上。</div>
+  <div class="hint">每张照片单独打一张 6寸；横版照片自动转正打印，成品即横版 6寸。「满屏裁剪」铺满相纸、裁掉少量边缘；「完整照片」整张照片都在纸上、留白边。</div>
 </div>
 
 <div class="card">
   <h2>预览</h2>
   <div class="fillRow">
-    <button id="fillCover" class="seg">满幅无边</button>
-    <button id="fillContain" class="seg">完整留白</button>
+    <button id="fillCover" class="seg">满屏裁剪</button>
+    <button id="fillContain" class="seg">完整照片</button>
   </div>
   <div id="summary">还没有照片</div>
   <canvas id="cv"></canvas>
@@ -334,7 +334,7 @@ function render(){
       ctx.restore();
     }
   });
-  $("summary").innerHTML = (S.fill === "contain" ? "一纸一照完整显示（留白边）" : "一纸一照满幅无边") +
+  $("summary").innerHTML = (S.fill === "contain" ? "一纸一照 · 完整照片（留白边）" : "一纸一照 · 满屏裁剪（无边）") +
     " · 已排 <b>" + L.used + "</b> 张照片 · 共 <b>" + L.sheets.length + "</b> 张 6寸纸";
 }
 
@@ -478,7 +478,7 @@ async function doPrint(){
       body: JSON.stringify({pdf: bytesToB64(buf), printer: detected.printer,
         copies: 1, media: detected.media, mediatype: detected.mediatype,
         mediatype_name: "MediaType", quality: true, fit: false, title: makeTitle(),  /* PDF=打印机原尺寸，禁止 CUPS 再缩放 */
-        meta: {paper: {w: PAPER.w, h: PAPER.h, mode: S.fill === "contain" ? "6寸完整留白" : "6寸满幅无边"},
+        meta: {paper: {w: PAPER.w, h: PAPER.h, mode: S.fill === "contain" ? "6寸完整照片" : "6寸满屏裁剪"},
           photos: S.photos.map(p=>({name: p.name,
             w: p.img.naturalWidth || p.img.width, h: p.img.naturalHeight || p.img.height,
             place: (p.exif && p.exif.place) || "", dt: (p.exif && p.exif.dt) || ""}))}})});
