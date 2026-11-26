@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>把美好时光印出来</title>
-<meta name="app-version" content="20261127.3">
+<meta name="app-version" content="20261127.4">
 <style>
 :root{--acc:#2563eb;--line:#e3e6ea;--sub:#6b7280;--ok:#15803d;--err:#dc2626}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -16,14 +16,13 @@ header{flex:none;text-align:center;padding:0 0 4px}
 header h1{font-size:18px;font-weight:700}
 .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px;margin-bottom:6px;box-shadow:0 1px 3px rgba(0,0,0,.04);flex:none}
 h2{font-size:13px;color:var(--sub);margin-bottom:6px;font-weight:600}
-#dropZone{border:1.5px dashed #c4c9d1;border-radius:12px;padding:12px 10px;text-align:center;color:var(--sub);font-size:14px;cursor:pointer}
+#dropZone{border:1.5px dashed #c4c9d1;border-radius:12px;padding:10px;text-align:center;color:var(--sub);font-size:14px;cursor:pointer}
 #dropZone:active{background:#eff6ff}
 #dropZone b{color:var(--acc);font-weight:500}
 #fileInput{display:none}
-#thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(56px,15vw),1fr));gap:8px;margin-top:10px}
-#thumbs .t{position:relative;border-radius:9px;overflow:hidden;background:#f0f1f3;aspect-ratio:1}
+#thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(44px,13vw),1fr));gap:6px;margin-top:8px}
+#thumbs .t{position:relative;border-radius:8px;overflow:hidden;background:#f0f1f3;aspect-ratio:1}
 #thumbs img{width:100%;height:100%;object-fit:cover;display:block}
-#thumbs .rm{position:absolute;top:3px;right:3px;width:22px;height:22px;border:none;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:13px;line-height:21px;text-align:center;padding:0}
 #thumbs .exifline{position:absolute;left:0;right:0;bottom:0;font-size:9px;background:rgba(0,0,0,.45);color:#fff;padding:2px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #thumbs .printedTag{position:absolute;left:0;top:0;font-size:9px;background:#16a34a;color:#fff;padding:2px 4px;border-radius:0 0 4px 0}
 .fillRow{display:flex;gap:0;margin-bottom:6px;border:1px solid #d8dbe0;border-radius:8px;overflow:hidden}
@@ -34,8 +33,13 @@ h2{font-size:13px;color:var(--sub);margin-bottom:6px;font-weight:600}
 #pv{flex:1 1 0;min-height:88px;display:flex;gap:10px;align-items:flex-start;margin:0 -6px;padding:0 6px;
     overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;scroll-padding:0 6px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 #pv::-webkit-scrollbar{display:none}
-#pv canvas{flex:none;scroll-snap-align:start}
-#pvHint{visibility:hidden;height:18px;line-height:16px;font-size:10.5px;color:var(--sub);text-align:center;margin-top:2px}
+#pv .pvItem{position:relative;flex:none;scroll-snap-align:start}
+#pv canvas{display:block}
+#pv .pvDel{position:absolute;z-index:1;width:20px;height:20px;border:none;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:13px;line-height:20px;text-align:center;padding:0}
+#pv .pvDel:active{background:#dc2626}
+#pvFoot{display:flex;align-items:center;gap:6px;height:18px;line-height:16px;margin-top:2px;font-size:10.5px;color:var(--sub)}
+#pvHint{flex:1;min-width:0;visibility:hidden;text-align:left;white-space:nowrap}
+#photoCount{flex:none;white-space:nowrap}
 .chk{display:flex;align-items:center;gap:8px;font-size:14px;margin-top:12px}
 .chk input{width:18px;height:18px;accent-color:var(--acc)}
 .btn{width:100%;padding:14px;border-radius:13px;border:none;background:var(--acc);color:#fff;font-size:17px;font-weight:600;cursor:pointer;margin-top:12px}
@@ -77,7 +81,7 @@ h2{font-size:13px;color:var(--sub);margin-bottom:6px;font-weight:600}
     <button id="fillContain" class="seg">完整照片</button>
   </div>
   <div id="pv"></div>
-  <div id="pvHint">照片较多，可左右滑动查看全部 →</div>
+  <div id="pvFoot"><div id="pvHint">照片较多，可左右滑动查看全部 →</div><div id="photoCount"></div></div>
   
 </div>
 
@@ -209,21 +213,27 @@ function printedDup(list){
 async function addPhotos(files){
   const imgs = Array.from(files).filter(f=>f.type.startsWith("image/"));
   if (!imgs.length) return;
-  const bad = [];
+  const bad = [], dups = [];
   for (const f of imgs){
     const bytes = new Uint8Array(await f.arrayBuffer());
+    const hash = fnv1a(bytes);
+    // 当前列表里已有相同内容就跳过；文件名不同也能识别。删除后允许重新选择。
+    if (S.photos.some(p=>p.hash === hash)){ dups.push(f.name); continue; }
     if (!(await (async()=>checkFileComplete(bytes))())){ bad.push(f.name); continue; }
     const exif = parseExif(bytes);
     await new Promise(res=>{
       const url = URL.createObjectURL(f);
       const img = new Image();
-      img.onload = ()=>{ S.photos.push({id:(crypto.randomUUID ? crypto.randomUUID() : "p"+Date.now()+"-"+Math.random().toString(36).slice(2,8)), name:f.name, img, exif, hash:fnv1a(bytes), printed:!!loadPrinted()[fnv1a(bytes)]}); res(); };
+      img.onload = ()=>{ S.photos.push({id:(crypto.randomUUID ? crypto.randomUUID() : "p"+Date.now()+"-"+Math.random().toString(36).slice(2,8)), name:f.name, img, exif, hash, printed:!!loadPrinted()[hash]}); res(); };
       img.onerror = ()=>{ setStatus("err", "无法解码：" + f.name); res(); };
       img.src = url;
     });
   }
-  refreshThumbs(); render(); setStatus("", "已添加 " + (S.photos.length) + " 张照片");
-  if (bad.length) setStatus("err", "⚠️ 已跳过不完整的文件：" + bad.join("、") + "（传输中断会打出自影）");
+  refreshThumbs(); render();
+  const notes = [];
+  if (dups.length) notes.push("已跳过重复选择：" + dups.join("、"));
+  if (bad.length) notes.push("已跳过不完整的文件：" + bad.join("、") + "（传输中断会打出自影）");
+  setStatus(notes.length ? "err" : "", notes.join("；"));
   geocodeMissing();
 }
 async function geocodeMissing(){
@@ -325,8 +335,11 @@ function render(){
   const sw = L.paper.w*k, sh = L.paper.h*k;
   // 用 round 避免浮点误差把刚好整数的高度 ceil 成多 1px，导致相纸下缘被预览区裁掉
   const cw = Math.round(sw + padX*2), ch = Math.round(labelH + sh + padB);
+  $("photoCount").textContent = S.photos.length ? "已添加 " + S.photos.length + " 张照片" : "";
   wrap.innerHTML = "";
   L.sheets.forEach((slots, i)=>{
+    const item = document.createElement("div");
+    item.className = "pvItem";
     const cv = document.createElement("canvas");
     cv.width = Math.round(cw*dpr); cv.height = Math.round(ch*dpr);
     cv.style.width = cw + "px"; cv.style.height = ch + "px";
@@ -345,8 +358,16 @@ function render(){
       drawFit(ctx, s.photo.img, padX, labelH, sw, sh, s.rotC, S.fill);
       if (S.stampInfo) drawStamp(ctx, padX, labelH, sw, sh, s.rotC, s.photo.exif, k, s.photo.img);
       ctx.restore();
+      // 删除入口移到预览照片右上角，选择区不再需要删除按钮
+      const del = document.createElement("button");
+      del.type = "button"; del.className = "pvDel"; del.textContent = "✕";
+      del.style.top = (labelH + 3) + "px"; del.style.right = (padX + 3) + "px";
+      del.setAttribute("aria-label", "删除第 " + (i+1) + " 张照片");
+      del.onclick = ()=>rmPhoto(i);
+      item.appendChild(del);
     }
-    wrap.appendChild(cv);
+    item.appendChild(cv);
+    wrap.appendChild(item);
   });
   wrap.scrollLeft = keepLeft;
   // 提示行始终预留同样的高度，只按最终相纸条是否真的可横滑来控制显隐，避免反复改变布局
@@ -563,13 +584,11 @@ async function cancelJob(job){
 function refreshThumbs(){
   const box = $("thumbs");
   box.innerHTML = "";
-  S.photos.forEach((p, i)=>{
+  S.photos.forEach(p=>{
     const d = document.createElement("div"); d.className = "t";
     d.innerHTML = '<img src="'+p.img.src+'">' +
       (p.printed ? '<div class="printedTag">已打印</div>' : '') +
-      (fmtExif(p.exif) ? '<div class="exifline">'+fmtExif(p.exif)+'</div>' : '') +
-      '<button class="rm">✕</button>';
-    d.querySelector(".rm").onclick = ()=>rmPhoto(i);
+      (fmtExif(p.exif) ? '<div class="exifline">'+fmtExif(p.exif)+'</div>' : '');
     box.appendChild(d);
   });
 }
