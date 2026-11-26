@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>照片打印 · 6寸</title>
+<title>把美好时光印出来</title>
+<meta name="app-version" content="20261127.2">
 <style>
 :root{--acc:#2563eb;--line:#e3e6ea;--sub:#6b7280;--ok:#15803d;--err:#dc2626}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font:15px/1.5 -apple-system,"PingFang SC",sans-serif;background:#eef0f3;color:#1d2129;padding:12px;padding-bottom:16px}
 header{text-align:center;padding:4px 0 10px}
 header h1{font-size:19px;font-weight:700}
-header p{font-size:12px;color:var(--sub);margin-top:2px}
 .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 h2{font-size:13px;color:var(--sub);margin-bottom:10px;font-weight:600}
 #dropZone{border:1.5px dashed #c4c9d1;border-radius:12px;padding:26px 10px;text-align:center;color:var(--sub);font-size:15px;cursor:pointer}
@@ -30,7 +30,6 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
 #summary{font-size:13px;color:#374151;margin:10px 0;text-align:center}
 .chk{display:flex;align-items:center;gap:8px;font-size:14px;margin-top:12px}
 .chk input{width:18px;height:18px;accent-color:var(--acc)}
-.hint{font-size:11.5px;color:var(--sub);margin-top:8px;line-height:1.5}
 .btn{width:100%;padding:14px;border-radius:13px;border:none;background:var(--acc);color:#fff;font-size:17px;font-weight:600;cursor:pointer;margin-top:12px}
 .btn:active{opacity:.85}
 .btn:disabled{opacity:.4}
@@ -50,15 +49,13 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
 </style>
 </head>
 <body>
-<header><h1>照片打印 · 6寸</h1><p>手机选照片，一张照片打一张 6寸</p></header>
-<div style="text-align:center;font-size:10px;color:#9aa1ab;margin:-4px 0 8px">手机版 v20261127.1</div>
+<header><h1>把美好时光印出来</h1></header>
 
 <div class="card">
   <h2>照片</h2>
   <div id="dropZone">点这里从相册选照片<br><b>可一次多选 · 每张打 1 份</b></div>
   <input type="file" id="fileInput" accept="image/*" multiple>
   <div id="thumbs"></div>
-  <div class="hint">每张照片单独打一张 6寸；横版照片自动转正打印，成品即横版 6寸。「满屏裁剪」铺满相纸、裁掉少量边缘；「完整照片」整张照片都在纸上、留白边。</div>
 </div>
 
 <div class="card">
