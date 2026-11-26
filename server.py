@@ -228,15 +228,23 @@ def geocode_place(lat, lon):
         def zh(s):
             return bool(s) and bool(re.search(r"[\u4e00-\u9fff]", s))
 
-        # 省级：优先 address.state；直辖市（北京/上海等）从 display_name 里找「xx市」
+        # 省级：优先 address.state；直辖市（北京/上海等）Nominatim 不给 state，
+        # 先用 ISO3166-2 代码映射；仍没有才从 display_name 尾部往前找「xx市」。
+        # 不能从头部正序找：店名以「市」结尾（如「卜蜂莲花生活超市」）会被误认成城市，
+        # 且 short() 会把店名末尾的「市」误当城市后缀截掉（曾打出「卜蜂莲花生活超·通州·…」）。
         prov = short(addr.get("state"), ("省", "自治区", "市"))
         if not prov:
-            for p in display:
-                if p.endswith("市") and len(p) >= 3:
+            MUNI = {"CN-BJ": "北京", "CN-SH": "上海", "CN-TJ": "天津",
+                    "CN-CQ": "重庆", "CN-HK": "香港", "CN-MO": "澳门"}
+            prov = MUNI.get(addr.get("ISO3166-2-lvl4") or "", "")
+        if not prov:
+            poi_name = data.get("name") or ""
+            for p in reversed(display):
+                if p.endswith("市") and len(p) >= 3 and p != poi_name:
                     prov = short(p, ("市",))
                     break
         dist = short(addr.get("city") or addr.get("town") or addr.get("county"),
-                     ("市", "区", "县", "旗"))
+                     ("新区", "市", "区", "县", "旗"))   # 「浦东新区」→「浦东」：新区要放在「区」前
         town = short(addr.get("town") or addr.get("suburb") or addr.get("city_district")
                      or addr.get("quarter"), ("镇", "乡", "街道", "社区"))
         road = addr.get("road") or ""
