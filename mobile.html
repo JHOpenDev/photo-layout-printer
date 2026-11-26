@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>把美好时光印出来</title>
-<meta name="app-version" content="20261127.4">
+<meta name="app-version" content="20261127.5">
 <style>
 :root{--acc:#2563eb;--line:#e3e6ea;--sub:#6b7280;--ok:#15803d;--err:#dc2626}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -20,11 +20,6 @@ h2{font-size:13px;color:var(--sub);margin-bottom:6px;font-weight:600}
 #dropZone:active{background:#eff6ff}
 #dropZone b{color:var(--acc);font-weight:500}
 #fileInput{display:none}
-#thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(44px,13vw),1fr));gap:6px;margin-top:8px}
-#thumbs .t{position:relative;border-radius:8px;overflow:hidden;background:#f0f1f3;aspect-ratio:1}
-#thumbs img{width:100%;height:100%;object-fit:cover;display:block}
-#thumbs .exifline{position:absolute;left:0;right:0;bottom:0;font-size:9px;background:rgba(0,0,0,.45);color:#fff;padding:2px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#thumbs .printedTag{position:absolute;left:0;top:0;font-size:9px;background:#16a34a;color:#fff;padding:2px 4px;border-radius:0 0 4px 0}
 .fillRow{display:flex;gap:0;margin-bottom:6px;border:1px solid #d8dbe0;border-radius:8px;overflow:hidden}
 .fillRow .seg{flex:1;border:none;background:#fff;padding:5px 0;font-size:13px;color:#6b7280}
 .fillRow .seg.on{background:#2563eb;color:#fff;font-weight:600}
@@ -37,6 +32,7 @@ h2{font-size:13px;color:var(--sub);margin-bottom:6px;font-weight:600}
 #pv canvas{display:block}
 #pv .pvDel{position:absolute;z-index:1;width:20px;height:20px;border:none;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:13px;line-height:20px;text-align:center;padding:0}
 #pv .pvDel:active{background:#dc2626}
+#pv .pvPrinted{position:absolute;z-index:1;font-size:9px;line-height:1.2;background:#16a34a;color:#fff;padding:2px 4px;border-radius:4px;white-space:nowrap}
 #pvFoot{display:flex;align-items:center;gap:6px;height:18px;line-height:16px;margin-top:2px;font-size:10.5px;color:var(--sub)}
 #pvHint{flex:1;min-width:0;visibility:hidden;text-align:left;white-space:nowrap}
 #photoCount{flex:none;white-space:nowrap}
@@ -71,7 +67,6 @@ h2{font-size:13px;color:var(--sub);margin-bottom:6px;font-weight:600}
   <h2>照片</h2>
   <div id="dropZone">点这里从相册选照片<br><b>可一次多选 · 每张打 1 份</b></div>
   <input type="file" id="fileInput" accept="image/*" multiple>
-  <div id="thumbs"></div>
 </div>
 
 <div class="card" id="pvCard">
@@ -101,28 +96,12 @@ const $ = id => document.getElementById(id);
 const MM2PT = 72/25.4;
 let PAPER = {w:102, h:152};            // 6寸 相纸（竖向）；探测到打印机 4x6 媒体后对齐其实际尺寸
 const GAP = 2;                          // 两张之间的下刀缝
-let S = { photos: [], stampInfo: true,
-  fill: (localStorage.getItem("mobileFill") === "contain" ? "contain" : "cover") };
+let S = { photos: [], stampInfo: true, fill: "cover" };   // 每次打开默认满屏裁剪，手动切换只在当前页面有效
+localStorage.removeItem("mobileFill");                    // 清理旧版本保存的模式，避免误解
 let printerCaps = { pagesizes: [], printer: "" };
 
 /* ================= EXIF（时间/地点） ================= */
 function fmtExifDate(dt){ return (dt||"").slice(0,16).replace(/^(\d{4}):(\d{2}):(\d{2})/, "$1-$2-$3"); }
-function fmtExifLoc(ex){
-  if (ex.place) return "📍 " + ex.place;
-  if (ex.lat !== null && ex.lat !== undefined)
-    return "📍 " + Math.abs(ex.lat).toFixed(4) + "°" + (ex.lat>=0?"N":"S") + " " +
-           Math.abs(ex.lon).toFixed(4) + "°" + (ex.lon>=0?"E":"W");
-  return "";
-}
-function fmtExif(ex){
-  if (!ex) return "";
-  const parts = [];
-  const hasAddr = !!ex.place || (ex.lat !== null && ex.lat !== undefined);
-  if (ex.dt) parts.push("📅 " + fmtExifDate(ex.dt).slice(0, hasAddr ? 16 : 10));
-  const loc = fmtExifLoc(ex);
-  if (loc) parts.push(loc);
-  return parts.join(" · ");
-}
 function parseExif(bytes){
   try{
     let pos = 2, tiff = null;
@@ -229,7 +208,7 @@ async function addPhotos(files){
       img.src = url;
     });
   }
-  refreshThumbs(); render();
+  render();
   const notes = [];
   if (dups.length) notes.push("已跳过重复选择：" + dups.join("、"));
   if (bad.length) notes.push("已跳过不完整的文件：" + bad.join("、") + "（传输中断会打出自影）");
@@ -246,10 +225,10 @@ async function geocodeMissing(){
       const d = await r.json();
       if (d.place) ex.place = d.place;
     }catch(e){ /* 无网回退经纬度 */ }
-    refreshThumbs(); render();
+    render();
   }
 }
-function rmPhoto(i){ S.photos.splice(i,1); refreshThumbs(); render(); setStatus("", ""); }
+function rmPhoto(i){ S.photos.splice(i,1); render(); setStatus("", ""); }
 
 /* ================= 排版（一纸一照满幅） ================= */
 function computeAll(){
@@ -365,6 +344,12 @@ function render(){
       del.setAttribute("aria-label", "删除第 " + (i+1) + " 张照片");
       del.onclick = ()=>rmPhoto(i);
       item.appendChild(del);
+      if (s.photo.printed){
+        const tag = document.createElement("div");
+        tag.className = "pvPrinted"; tag.textContent = "已打印";
+        tag.style.top = (labelH + 3) + "px"; tag.style.left = (padX + 3) + "px";
+        item.appendChild(tag);
+      }
     }
     item.appendChild(cv);
     wrap.appendChild(item);
@@ -528,7 +513,7 @@ async function doPrint(){
             place: (p.exif && p.exif.place) || "", dt: (p.exif && p.exif.dt) || ""}))}})});
     const d = await r.json();
     setStatus(d.ok ? "ok" : "err", (d.ok ? "✔ " : "✕ ") + (d.ok ? "已发送，共 " + S.photos.length + " 张照片" : (d.error||"打印失败")));
-    if (d.ok){ setStatus("ok", "✔ 已发送，共 " + S.photos.length + " 张照片"); markPrinted(S.photos); S.photos.forEach(p=>p.printed = true); refreshThumbs(); loadQueue(); }
+    if (d.ok){ setStatus("ok", "✔ 已发送，共 " + S.photos.length + " 张照片"); markPrinted(S.photos); S.photos.forEach(p=>p.printed = true); render(); loadQueue(); }
   }catch(e){ setStatus("err", "✕ 发送失败：" + e.message); }
 }
 async function doDownload(){
@@ -568,7 +553,7 @@ async function loadQueue(){
     setStatus("ok", "✔ 已取消全部任务"); loadQueue();
   };
   const rp = box.querySelector("#resetPrinted");
-  if (rp) rp.onclick = ()=>{ if (confirm("确定清除本机的已打印记录吗？（清除后同一张照片可以再次打印）")){ localStorage.removeItem("printedHistory"); S.photos.forEach(p=>p.printed = false); refreshThumbs(); loadQueue(); setStatus("ok", "✔ 已打印记录已清空"); } };
+  if (rp) rp.onclick = ()=>{ if (confirm("确定清除本机的已打印记录吗？（清除后同一张照片可以再次打印）")){ localStorage.removeItem("printedHistory"); S.photos.forEach(p=>p.printed = false); render(); loadQueue(); setStatus("ok", "✔ 已打印记录已清空"); } };
   box.querySelectorAll("button[data-job]").forEach(b=> b.onclick = ()=>cancelJob(+b.dataset.job));
   fitPreview();   // 面板展开后预览区变矮，按新高度重画
 }
@@ -581,18 +566,7 @@ async function cancelJob(job){
 }
 
 /* ================= 界面绑定 ================= */
-function refreshThumbs(){
-  const box = $("thumbs");
-  box.innerHTML = "";
-  S.photos.forEach(p=>{
-    const d = document.createElement("div"); d.className = "t";
-    d.innerHTML = '<img src="'+p.img.src+'">' +
-      (p.printed ? '<div class="printedTag">已打印</div>' : '') +
-      (fmtExif(p.exif) ? '<div class="exifline">'+fmtExif(p.exif)+'</div>' : '');
-    box.appendChild(d);
-  });
-}
-function setFill(v){ S.fill = v; localStorage.setItem("mobileFill", v); syncFillUI(); render(); }
+function setFill(v){ S.fill = v; syncFillUI(); render(); }
 function syncFillUI(){
   const c = $("fillCover"), t = $("fillContain");
   if (!c) return;
