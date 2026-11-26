@@ -4,29 +4,38 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>把美好时光印出来</title>
-<meta name="app-version" content="20261127.2">
+<meta name="app-version" content="20261127.3">
 <style>
 :root{--acc:#2563eb;--line:#e3e6ea;--sub:#6b7280;--ok:#15803d;--err:#dc2626}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font:15px/1.5 -apple-system,"PingFang SC",sans-serif;background:#eef0f3;color:#1d2129;padding:12px;padding-bottom:16px}
-header{text-align:center;padding:4px 0 10px}
-header h1{font-size:19px;font-weight:700}
-.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
-h2{font-size:13px;color:var(--sub);margin-bottom:10px;font-weight:600}
-#dropZone{border:1.5px dashed #c4c9d1;border-radius:12px;padding:26px 10px;text-align:center;color:var(--sub);font-size:15px;cursor:pointer}
+/* 纵向弹性布局：预览区吃掉剩余高度，整页尽量一屏放下、不用往下滑 */
+body{font:15px/1.5 -apple-system,"PingFang SC",sans-serif;background:#eef0f3;color:#1d2129;padding:8px 12px 10px;
+     display:flex;flex-direction:column;min-height:100vh}
+@supports (height:100dvh){body{height:100dvh;min-height:0}}   /* 支持动态视口的浏览器用定高：别的内容变多时先压缩预览区 */
+header{flex:none;text-align:center;padding:0 0 4px}
+header h1{font-size:18px;font-weight:700}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px;margin-bottom:6px;box-shadow:0 1px 3px rgba(0,0,0,.04);flex:none}
+h2{font-size:13px;color:var(--sub);margin-bottom:6px;font-weight:600}
+#dropZone{border:1.5px dashed #c4c9d1;border-radius:12px;padding:12px 10px;text-align:center;color:var(--sub);font-size:14px;cursor:pointer}
 #dropZone:active{background:#eff6ff}
 #dropZone b{color:var(--acc);font-weight:500}
 #fileInput{display:none}
-#thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px;margin-top:12px}
+#thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(56px,15vw),1fr));gap:8px;margin-top:10px}
 #thumbs .t{position:relative;border-radius:9px;overflow:hidden;background:#f0f1f3;aspect-ratio:1}
 #thumbs img{width:100%;height:100%;object-fit:cover;display:block}
 #thumbs .rm{position:absolute;top:3px;right:3px;width:22px;height:22px;border:none;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:13px;line-height:21px;text-align:center;padding:0}
 #thumbs .exifline{position:absolute;left:0;right:0;bottom:0;font-size:9px;background:rgba(0,0,0,.45);color:#fff;padding:2px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #thumbs .printedTag{position:absolute;left:0;top:0;font-size:9px;background:#16a34a;color:#fff;padding:2px 4px;border-radius:0 0 4px 0}
-.fillRow{display:flex;gap:0;margin-bottom:8px;border:1px solid #d8dbe0;border-radius:8px;overflow:hidden}
-.fillRow .seg{flex:1;border:none;background:#fff;padding:8px 0;font-size:13px;color:#6b7280}
+.fillRow{display:flex;gap:0;margin-bottom:6px;border:1px solid #d8dbe0;border-radius:8px;overflow:hidden}
+.fillRow .seg{flex:1;border:none;background:#fff;padding:5px 0;font-size:13px;color:#6b7280}
 .fillRow .seg.on{background:#2563eb;color:#fff;font-weight:600}
-canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
+/* 预览卡片占满剩余高度；#pv 是可左右滑动的相纸条，相纸高度跟着剩余空间伸缩 */
+#pvCard{flex:1 1 auto;display:flex;flex-direction:column}
+#pv{flex:1 1 0;min-height:88px;display:flex;gap:10px;align-items:flex-start;margin:0 -6px;padding:0 6px;
+    overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;scroll-padding:0 6px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+#pv::-webkit-scrollbar{display:none}
+#pv canvas{flex:none;scroll-snap-align:start}
+#pvHint{visibility:hidden;height:18px;line-height:16px;font-size:10.5px;color:var(--sub);text-align:center;margin-top:2px}
 .chk{display:flex;align-items:center;gap:8px;font-size:14px;margin-top:12px}
 .chk input{width:18px;height:18px;accent-color:var(--acc)}
 .btn{width:100%;padding:14px;border-radius:13px;border:none;background:var(--acc);color:#fff;font-size:17px;font-weight:600;cursor:pointer;margin-top:12px}
@@ -61,13 +70,14 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
   <div id="thumbs"></div>
 </div>
 
-<div class="card">
+<div class="card" id="pvCard">
   <h2>预览</h2>
   <div class="fillRow">
     <button id="fillCover" class="seg">满屏裁剪</button>
     <button id="fillContain" class="seg">完整照片</button>
   </div>
-  <canvas id="cv"></canvas>
+  <div id="pv"></div>
+  <div id="pvHint">照片较多，可左右滑动查看全部 →</div>
   
 </div>
 
@@ -298,40 +308,49 @@ function drawStamp(ctx, x, y, w, h, rot, exif, k, img){
 }
 
 /* ================= 预览 ================= */
+let lastBox = "";                                   // 预览区上次的尺寸；变了才需要重画
+function boxSig(){ const w = $("pv"); return w.clientWidth + "x" + w.clientHeight; }
+function fitPreview(){ if (boxSig() !== lastBox) render(); }   // 提示行出现/消失、横竖屏切换等改变了预览区高度时，按新高度重画
 function render(){
   const L = computeAll();
-  const cv = $("cv");
-  const card = cv.parentElement;
-  const contentW = Math.max(200, card.clientWidth - 28);
-  const dpr = window.devicePixelRatio || 1;
-  const pad = 6, labelH = 15, gapY = 12;
-  let k = contentW / L.paper.w;
-  let H = pad*2 + labelH + L.sheets.length * L.paper.h*k + (L.sheets.length-1)*(labelH + gapY);
-  const maxDev = 3400;
-  if (H * dpr > maxDev){ const f = maxDev / (H * dpr); k *= f; H *= f; }
-  cv.width = Math.round(contentW*dpr); cv.height = Math.round(H*dpr);
-  cv.style.width = contentW+"px"; cv.style.height = H+"px";
-  cv.style.display = "block";
-  const ctx = cv.getContext("2d");
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-  ctx.clearRect(0,0,contentW,H);
-  L.sheets.forEach((slots,i)=>{
-    const ox = pad, oy = pad + labelH + i*(L.paper.h*k + labelH + gapY);   // 顶部留出一行标签的高度，第一张的标签才不会被画布上边缘切掉
+  const wrap = $("pv");
+  const keepLeft = wrap.scrollLeft;                 // 重画后保持已经滑到的位置
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const labelH = 17, padX = 6, padB = 8;           // 相纸上方留一行「第 N 张」，左右和底部给阴影留边
+  const innerW = wrap.clientWidth - padX*2;
+  const heightK = ()=> (Math.max(88, wrap.clientHeight) - labelH - padB) / L.paper.h;   // 按预览区可用高度算出的比例
+  lastBox = boxSig();
+  // 相纸高度 = 预览区可用高度；同时不超过预览区宽度，最高 420px
+  const k = Math.min(heightK(), innerW / L.paper.w, 420 / L.paper.h);
+  const sw = L.paper.w*k, sh = L.paper.h*k;
+  // 用 round 避免浮点误差把刚好整数的高度 ceil 成多 1px，导致相纸下缘被预览区裁掉
+  const cw = Math.round(sw + padX*2), ch = Math.round(labelH + sh + padB);
+  wrap.innerHTML = "";
+  L.sheets.forEach((slots, i)=>{
+    const cv = document.createElement("canvas");
+    cv.width = Math.round(cw*dpr); cv.height = Math.round(ch*dpr);
+    cv.style.width = cw + "px"; cv.style.height = ch + "px";
+    const ctx = cv.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = "#8a8f99"; ctx.font = "11px -apple-system"; ctx.textAlign = "left";
-    ctx.fillText("第 " + (i+1) + " 张", ox, oy - 4);
+    ctx.fillText("第 " + (i+1) + " 张", padX, labelH - 5);
     ctx.save();
     ctx.shadowColor = "rgba(0,0,0,.15)"; ctx.shadowBlur = 8; ctx.shadowOffsetY = 2;
-    ctx.fillStyle = "#fff"; ctx.fillRect(ox, oy, L.paper.w*k, L.paper.h*k);
+    ctx.fillStyle = "#fff"; ctx.fillRect(padX, labelH, sw, sh);
     ctx.restore();
-    ctx.strokeStyle = "#d8dbe0"; ctx.strokeRect(ox+.5, oy+.5, L.paper.w*k-1, L.paper.h*k-1);
+    ctx.strokeStyle = "#d8dbe0"; ctx.strokeRect(padX+.5, labelH+.5, sw-1, sh-1);
     const s = slots[0];
     if (s.photo){
-      ctx.save(); ctx.beginPath(); ctx.rect(ox, oy, L.paper.w*k, L.paper.h*k); ctx.clip();
-      drawFit(ctx, s.photo.img, ox, oy, L.paper.w*k, L.paper.h*k, s.rotC, S.fill);
-      if (S.stampInfo) drawStamp(ctx, ox, oy, L.paper.w*k, L.paper.h*k, s.rotC, s.photo.exif, k, s.photo.img);
+      ctx.save(); ctx.beginPath(); ctx.rect(padX, labelH, sw, sh); ctx.clip();
+      drawFit(ctx, s.photo.img, padX, labelH, sw, sh, s.rotC, S.fill);
+      if (S.stampInfo) drawStamp(ctx, padX, labelH, sw, sh, s.rotC, s.photo.exif, k, s.photo.img);
       ctx.restore();
     }
+    wrap.appendChild(cv);
   });
+  wrap.scrollLeft = keepLeft;
+  // 提示行始终预留同样的高度，只按最终相纸条是否真的可横滑来控制显隐，避免反复改变布局
+  $("pvHint").style.visibility = wrap.scrollWidth > wrap.clientWidth + 1 ? "visible" : "hidden";
 }
 
 /* ================= PDF 生成 ================= */
@@ -421,7 +440,7 @@ async function buildPDFBytes(){
 /* ================= 打印机对接 ================= */
 let serviceOK = false;
 let detected = {printer:"", media:"", mediatype:""};
-function setStatus(cls, msg){ const el = $("status"); el.className = cls; el.textContent = msg; }
+const PRINTER_ALIAS = {"HP_Smart_Tank_580_590_series__550ACC__20261031200307": "HP Smart Tank 599"};   // 系统里的长名字 → 页面上显示的短名字
 const SIZE_PRI = [/^4x6\.fullbleed$/i, /^4x6$/i, /4x6|6x4|10x15|102x152|om4x6/i, /100x150/i];
 const PHOTO_RE = /photo|photographic|gloss|相|照片|光面|premium/i;
 /* 连接状态：跟在打印机名后面显示 */
@@ -436,8 +455,8 @@ async function initPrinter(){
     const pick = (pr.printers.find(p=>/hp|惠普/i.test(p.name)) || {}).name ||
                  (pr.printers.some(p=>p.name===pr.default) ? pr.default : (pr.printers[0]||{}).name) || "";
     detected.printer = pick;
-    // 完整显示打印机名（不截断）；下划线后插入零宽空格，名字太长时在下划线处换行，不会整串挤到下一行
-    $("printerName").textContent = pick ? pick.replace(/_/g, "_\u200B") : "未检测到";
+    // 有简短名字的用简短名字；其余完整显示（不截断），下划线后插入零宽空格，太长时在下划线处换行
+    $("printerName").textContent = !pick ? "未检测到" : (PRINTER_ALIAS[pick] || pick.replace(/_/g, "_\u200B"));
     if (!pick){ $("btnPrint").disabled = true; return; }
     const op = await (await fetch("/api/options?printer="+encodeURIComponent(pick))).json();
     const ps = (op.pagesize||{});
@@ -513,7 +532,7 @@ async function loadQueue(){
   catch(e){ return; }
   $("qBtn").textContent = "📋 待打印 " + jobs.length + (jobs.length ? " ⚠️" : "");
   const box = $("queueBox");
-  if (!queueOpen){ box.style.display = "none"; return; }
+  if (!queueOpen){ box.style.display = "none"; fitPreview(); return; }   // 面板收起后预览区变高，按新高度重画
   box.style.display = "block";
   box.innerHTML = jobs.length
     ? jobs.map(j=>'<div class="job"><span class="n">#'+j.job+' · '+(j.name||'（未记录）')+'</span><button class="c" data-job="'+j.job+'">取消</button></div>').join("")
@@ -530,6 +549,7 @@ async function loadQueue(){
   const rp = box.querySelector("#resetPrinted");
   if (rp) rp.onclick = ()=>{ if (confirm("确定清除本机的已打印记录吗？（清除后同一张照片可以再次打印）")){ localStorage.removeItem("printedHistory"); S.photos.forEach(p=>p.printed = false); refreshThumbs(); loadQueue(); setStatus("ok", "✔ 已打印记录已清空"); } };
   box.querySelectorAll("button[data-job]").forEach(b=> b.onclick = ()=>cancelJob(+b.dataset.job));
+  fitPreview();   // 面板展开后预览区变矮，按新高度重画
 }
 async function cancelJob(job){
   try{
@@ -571,9 +591,9 @@ function bindUI(){
   syncFillUI();
   $("fillCover").onclick = ()=>setFill("cover");
   $("fillContain").onclick = ()=>setFill("contain");
-  window.addEventListener("resize", render);
+  window.addEventListener("resize", fitPreview);
 }
-function setStatus(cls, msg){ const el = $("status"); el.className = cls; el.textContent = msg; }
+function setStatus(cls, msg){ const el = $("status"); el.className = cls; el.textContent = msg; fitPreview(); }   // 提示行出现/消失会改变预览区高度
 
 /* ================= 启动 ================= */
 bindUI();
