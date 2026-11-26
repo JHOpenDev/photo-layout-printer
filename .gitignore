@@ -2,3 +2,4 @@ job_labels.json
 .DS_Store
 __pycache__/
 *.pyc
+print_log.json

@@ -14,8 +14,10 @@ import base64
 import json
 import os
 import re
+import sys
 import subprocess
 import tempfile
+import threading
 import time as _time
 import urllib.parse
 import urllib.request
@@ -115,6 +117,47 @@ def options_payload(printer):
                            "current": bl.get("current")}}
 
 
+PRINT_LOG = os.path.join(ROOT, "print_log.json")
+_log_lock = threading.Lock()
+
+def pdf_info(pdf):
+    """从生成的 PDF 里解析页数与纸张物理尺寸（mm）"""
+    out = {"pages": 0, "paper_mm": [0, 0]}
+    try:
+        mb = re.search(rb"/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]", pdf)
+        if mb:
+            out["paper_mm"] = [round(float(mb.group(1))/72*25.4, 1),
+                               round(float(mb.group(2))/72*25.4, 1)]
+        out["pages"] = len(re.findall(rb"/Type\s*/Page[^s]", pdf))
+    except Exception:
+        pass
+    return out
+
+def log_print(printer, jid, title, data, pdf, ok, err):
+    """把每次打印（含失败）追加到 print_log.json，最多留 500 条"""
+    info = pdf_info(pdf)
+    rec = {
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "ok": ok, "printer": printer, "job": jid, "title": title,
+        "pages": info["pages"], "paper_mm": info["paper_mm"],
+        "copies": max(1, int(data.get("copies") or 1)),
+        "media": (data.get("media") or ""), "mediatype": (data.get("mediatype") or ""),
+        "quality": bool(data.get("quality")), "fit": bool(data.get("fit", True)),
+        "pdf_bytes": len(pdf), "held": bool(data.get("hold")),
+        "meta": data.get("meta") or {}, "error": (err or "")[:200],
+    }
+    try:
+        with _log_lock:
+            logs = []
+            if os.path.exists(PRINT_LOG):
+                with open(PRINT_LOG, encoding="utf-8") as f:
+                    logs = json.load(f)
+            logs.append(rec)
+            with open(PRINT_LOG, "w", encoding="utf-8") as f:
+                json.dump(logs[-500:], f, ensure_ascii=False, indent=1)
+    except Exception as e:
+        print("写打印日志失败:", e, file=sys.stderr)
+
 def handle_print(data):
     printer = (data.get("printer") or "").strip()
     if not printer:
@@ -166,8 +209,10 @@ def handle_print(data):
     msg = (out or err).strip()
     if rc == 0:
         jid = record_job_label(printer, msg, title)
+        log_print(printer, jid, title, data, pdf, True, "")
         return {"ok": True, "message": "已发送到打印机「%s」（任务 #%s）：%s" % (printer, jid or "?", msg),
                 "job": jid, "cmd": " ".join(cmd), "file": path}
+    log_print(printer, None, title, data, pdf, False, msg)
     return {"ok": False, "error": "打印命令失败：%s（命令：%s）" % (msg, " ".join(cmd))}
 
 
@@ -365,6 +410,13 @@ class Handler(BaseHTTPRequestHandler):
                     self._send(200, f.read(), "text/html; charset=utf-8")
             except OSError as e:
                 self._send(500, json.dumps({"error": str(e)}).encode())
+        elif path == "/api/log":
+            try:
+                with open(PRINT_LOG, encoding="utf-8") as f:
+                    logs = json.load(f)
+            except Exception:
+                logs = []
+            self._send(200, json.dumps({"logs": logs[-100:]}, ensure_ascii=False).encode())
         elif path == "/api/printers":
             self._send(200, json.dumps(list_printers()).encode())
         elif self.path.startswith("/api/geocode"):
