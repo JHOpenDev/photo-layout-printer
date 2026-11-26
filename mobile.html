@@ -27,7 +27,6 @@ h2{font-size:13px;color:var(--sub);margin-bottom:10px;font-weight:600}
 .fillRow .seg{flex:1;border:none;background:#fff;padding:8px 0;font-size:13px;color:#6b7280}
 .fillRow .seg.on{background:#2563eb;color:#fff;font-weight:600}
 canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
-#summary{font-size:13px;color:#374151;margin:10px 0;text-align:center}
 .chk{display:flex;align-items:center;gap:8px;font-size:14px;margin-top:12px}
 .chk input{width:18px;height:18px;accent-color:var(--acc)}
 .btn{width:100%;padding:14px;border-radius:13px;border:none;background:var(--acc);color:#fff;font-size:17px;font-weight:600;cursor:pointer;margin-top:12px}
@@ -66,7 +65,6 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
     <button id="fillCover" class="seg">满屏裁剪</button>
     <button id="fillContain" class="seg">完整照片</button>
   </div>
-  <div id="summary">还没有照片</div>
   <canvas id="cv"></canvas>
   
 </div>
@@ -335,8 +333,6 @@ function render(){
       ctx.restore();
     }
   });
-  $("summary").innerHTML = (S.fill === "contain" ? "一纸一照 · 完整照片（留白边）" : "一纸一照 · 满屏裁剪（无边）") +
-    " · 已排 <b>" + L.used + "</b> 张照片 · 共 <b>" + L.sheets.length + "</b> 张 6寸纸";
 }
 
 /* ================= PDF 生成 ================= */
