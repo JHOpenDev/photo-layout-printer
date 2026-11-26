@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>把美好时光印出来</title>
-<meta name="app-version" content="20261127.5">
+<meta name="app-version" content="20261127.6">
 <style>
 :root{--acc:#2563eb;--line:#e3e6ea;--sub:#6b7280;--ok:#15803d;--err:#dc2626}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -72,8 +72,8 @@ h2{font-size:13px;color:var(--sub);margin-bottom:6px;font-weight:600}
 <div class="card" id="pvCard">
   <h2>预览</h2>
   <div class="fillRow">
-    <button id="fillCover" class="seg">满屏裁剪</button>
     <button id="fillContain" class="seg">完整照片</button>
+    <button id="fillCover" class="seg">满屏裁剪</button>
   </div>
   <div id="pv"></div>
   <div id="pvFoot"><div id="pvHint">照片较多，可左右滑动查看全部 →</div><div id="photoCount"></div></div>
@@ -96,7 +96,7 @@ const $ = id => document.getElementById(id);
 const MM2PT = 72/25.4;
 let PAPER = {w:102, h:152};            // 6寸 相纸（竖向）；探测到打印机 4x6 媒体后对齐其实际尺寸
 const GAP = 2;                          // 两张之间的下刀缝
-let S = { photos: [], stampInfo: true, fill: "cover" };   // 每次打开默认满屏裁剪，手动切换只在当前页面有效
+let S = { photos: [], stampInfo: true, fill: "contain" }; // 每次打开默认完整照片，手动切换只在当前页面有效
 localStorage.removeItem("mobileFill");                    // 清理旧版本保存的模式，避免误解
 let printerCaps = { pagesizes: [], printer: "" };
 
