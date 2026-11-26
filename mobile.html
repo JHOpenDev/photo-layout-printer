@@ -23,6 +23,9 @@ h2{font-size:13px;color:var(--sub);margin-bottom:10px;font-weight:600}
 #thumbs .rm{position:absolute;top:3px;right:3px;width:22px;height:22px;border:none;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:13px;line-height:21px;text-align:center;padding:0}
 #thumbs .exifline{position:absolute;left:0;right:0;bottom:0;font-size:9px;background:rgba(0,0,0,.45);color:#fff;padding:2px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #thumbs .printedTag{position:absolute;left:0;top:0;font-size:9px;background:#16a34a;color:#fff;padding:2px 4px;border-radius:0 0 4px 0}
+.fillRow{display:flex;gap:0;margin-bottom:8px;border:1px solid #d8dbe0;border-radius:8px;overflow:hidden}
+.fillRow .seg{flex:1;border:none;background:#fff;padding:8px 0;font-size:13px;color:#6b7280}
+.fillRow .seg.on{background:#2563eb;color:#fff;font-weight:600}
 canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
 #summary{font-size:13px;color:#374151;margin:10px 0;text-align:center}
 .chk{display:flex;align-items:center;gap:8px;font-size:14px;margin-top:12px}
@@ -47,19 +50,23 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
 </style>
 </head>
 <body>
-<header><h1>照片打印 · 6寸</h1><p>手机选照片，一张照片打一张 6寸（满幅无边）</p></header>
-<div style="text-align:center;font-size:10px;color:#9aa1ab;margin:-4px 0 8px">手机版 v20261126.2</div>
+<header><h1>照片打印 · 6寸</h1><p>手机选照片，一张照片打一张 6寸</p></header>
+<div style="text-align:center;font-size:10px;color:#9aa1ab;margin:-4px 0 8px">手机版 v20261127</div>
 
 <div class="card">
   <h2>照片</h2>
   <div id="dropZone">点这里从相册选照片<br><b>可一次多选 · 每张打 1 份</b></div>
   <input type="file" id="fileInput" accept="image/*" multiple>
   <div id="thumbs"></div>
-  <div class="hint">每张照片单独打一张 6寸（满幅无边）；横版照片自动转正打印，成品即横版 6寸。</div>
+  <div class="hint">每张照片单独打一张 6寸；横版照片自动转正打印，成品即横版 6寸。「满幅无边」会裁掉少量边缘，「完整留白」整张照片都在纸上。</div>
 </div>
 
 <div class="card">
   <h2>预览</h2>
+  <div class="fillRow">
+    <button id="fillCover" class="seg">满幅无边</button>
+    <button id="fillContain" class="seg">完整留白</button>
+  </div>
   <div id="summary">还没有照片</div>
   <canvas id="cv"></canvas>
   
@@ -82,7 +89,8 @@ const $ = id => document.getElementById(id);
 const MM2PT = 72/25.4;
 let PAPER = {w:102, h:152};            // 6寸 相纸（竖向）；探测到打印机 4x6 媒体后对齐其实际尺寸
 const GAP = 2;                          // 两张之间的下刀缝
-let S = { photos: [], stampInfo: true, fill: "cover" };
+let S = { photos: [], stampInfo: true,
+  fill: (localStorage.getItem("mobileFill") === "contain" ? "contain" : "cover") };
 let printerCaps = { pagesizes: [], printer: "" };
 
 /* ================= EXIF（时间/地点） ================= */
@@ -237,9 +245,10 @@ function computeAll(){
   return {paper:PAPER, sheets, per:1, used:q.length, single:true};
 }
 /* 把图片 cover 填满矩形 */
-function drawFit(ctx, img, x, y, w, h, rot){
+function drawFit(ctx, img, x, y, w, h, rot, fill){
   const iw = img.naturalWidth||img.width, ih = img.naturalHeight||img.height;
-  const sc = rot ? Math.max(w/ih, h/iw) : Math.max(w/iw, h/ih);
+  const minmax = (fill || S.fill) === "contain" ? Math.min : Math.max;  // contain=完整显示留白边
+  const sc = rot ? minmax(w/ih, h/iw) : minmax(w/iw, h/ih);
   const a = iw*sc, b = ih*sc;
   ctx.save();
   ctx.translate(x+w/2, y+h/2);
@@ -320,12 +329,13 @@ function render(){
     const s = slots[0];
     if (s.photo){
       ctx.save(); ctx.beginPath(); ctx.rect(ox, oy, L.paper.w*k, L.paper.h*k); ctx.clip();
-      drawFit(ctx, s.photo.img, ox, oy, L.paper.w*k, L.paper.h*k, s.rotC);
+      drawFit(ctx, s.photo.img, ox, oy, L.paper.w*k, L.paper.h*k, s.rotC, S.fill);
       if (S.stampInfo) drawStamp(ctx, ox, oy, L.paper.w*k, L.paper.h*k, s.rotC, s.photo.exif, k, s.photo.img);
       ctx.restore();
     }
   });
-  $("summary").innerHTML = "一纸一照满幅 · 已排 <b>" + L.used + "</b> 张照片 · 共 <b>" + L.sheets.length + "</b> 张 6寸纸";
+  $("summary").innerHTML = (S.fill === "contain" ? "一纸一照完整显示（留白边）" : "一纸一照满幅无边") +
+    " · 已排 <b>" + L.used + "</b> 张照片 · 共 <b>" + L.sheets.length + "</b> 张 6寸纸";
 }
 
 /* ================= PDF 生成 ================= */
@@ -468,7 +478,7 @@ async function doPrint(){
       body: JSON.stringify({pdf: bytesToB64(buf), printer: detected.printer,
         copies: 1, media: detected.media, mediatype: detected.mediatype,
         mediatype_name: "MediaType", quality: true, fit: false, title: makeTitle(),  /* PDF=打印机原尺寸，禁止 CUPS 再缩放 */
-        meta: {paper: {w: PAPER.w, h: PAPER.h, mode: "6寸满幅"},
+        meta: {paper: {w: PAPER.w, h: PAPER.h, mode: S.fill === "contain" ? "6寸完整留白" : "6寸满幅无边"},
           photos: S.photos.map(p=>({name: p.name,
             w: p.img.naturalWidth || p.img.width, h: p.img.naturalHeight || p.img.height,
             place: (p.exif && p.exif.place) || "", dt: (p.exif && p.exif.dt) || ""}))}})});
@@ -539,6 +549,13 @@ function refreshThumbs(){
     box.appendChild(d);
   });
 }
+function setFill(v){ S.fill = v; localStorage.setItem("mobileFill", v); syncFillUI(); render(); }
+function syncFillUI(){
+  const c = $("fillCover"), t = $("fillContain");
+  if (!c) return;
+  c.classList.toggle("on", S.fill === "cover");
+  t.classList.toggle("on", S.fill === "contain");
+}
 function bindUI(){
   const dz = $("dropZone"), fi = $("fileInput");
   dz.onclick = ()=>fi.click();
@@ -547,6 +564,9 @@ function bindUI(){
   dz.addEventListener("drop", e=>{ e.preventDefault(); addPhotos(e.dataTransfer.files); });
   $("qBtn").onclick = ()=>{ queueOpen = !queueOpen; loadQueue(); };
   $("btnPrint").onclick = doPrint;
+  syncFillUI();
+  $("fillCover").onclick = ()=>setFill("cover");
+  $("fillContain").onclick = ()=>setFill("contain");
   window.addEventListener("resize", render);
 }
 function setStatus(cls, msg){ const el = $("status"); el.className = cls; el.textContent = msg; }
