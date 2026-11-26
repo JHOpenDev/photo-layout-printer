@@ -40,7 +40,9 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
 #status{font-size:12.5px;margin-top:10px;min-height:18px;color:var(--sub);word-break:break-all}
 #status.ok{color:var(--ok)}
 #status.err{color:var(--err)}
-#printerInfo{font-size:12px;color:var(--sub);text-align:center}
+.secHead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px}
+.secHead h2{margin-bottom:0;flex:none}
+#printerInfo{font-size:10.5px;color:var(--sub);text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #queueBox{margin-top:10px;display:none}
 #queueBox .job{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:7px 0;border-top:1px solid #f0f1f3;color:#374151}
 #queueBox .job .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -70,8 +72,10 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
 </div>
 
 <div class="card">
-  <h2>打印</h2>
-  <div id="printerInfo">正在获取打印机…</div>
+  <div class="secHead">
+    <h2>打印</h2>
+    <div id="printerInfo">正在获取打印机…</div>
+  </div>
   <div id="qbar" style="display:flex;gap:8px;margin-top:10px">
     <button class="btn gray" id="qBtn" style="margin:0">📋 待打印任务 0</button>
   </div>
