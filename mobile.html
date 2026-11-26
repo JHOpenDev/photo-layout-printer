@@ -48,7 +48,7 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
 </head>
 <body>
 <header><h1>照片打印 · 6寸</h1><p>手机选照片，一张照片打一张 6寸（满幅无边）</p></header>
-<div style="text-align:center;font-size:10px;color:#9aa1ab;margin:-4px 0 8px">手机版 v20261126.1</div>
+<div style="text-align:center;font-size:10px;color:#9aa1ab;margin:-4px 0 8px">手机版 v20261126.2</div>
 
 <div class="card">
   <h2>照片</h2>
@@ -80,7 +80,7 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
 "use strict";
 const $ = id => document.getElementById(id);
 const MM2PT = 72/25.4;
-const PAPER = {w:102, h:152};          // 6寸 相纸（竖向）
+let PAPER = {w:102, h:152};            // 6寸 相纸（竖向）；探测到打印机 4x6 媒体后对齐其实际尺寸
 const GAP = 2;                          // 两张之间的下刀缝
 let S = { photos: [], stampInfo: true, fill: "cover" };
 let printerCaps = { pagesizes: [], printer: "" };
@@ -431,6 +431,11 @@ async function initPrinter(){
     detected.media = SIZE_PRI.map(rx=>(ps.choices||[]).find(c=>rx.test(c))).find(Boolean) || "";
     const mt = (op.mediatype||{});
     detected.mediatype = (mt.choices||[]).find(c=>PHOTO_RE.test(c)) || "";
+    // PDF 页面尺寸对齐打印机实际纸张规格：4x6=101.6×152.4mm（正好 288×432pt 整数）。
+    // 之前用中国 6寸 102×152mm，fit-to-page 每次都整体缩 0.39%；对齐后无需任何缩放。
+    if (/^(4x6|6x4)/i.test(detected.media)) PAPER = {w:101.6, h:152.4};
+    else if (/100x150/i.test(detected.media)) PAPER = {w:100, h:150};
+    render();
     $("btnPrint").disabled = false;
     setStatus("ok", "✔ 打印服务已连接");
   }catch(e){
@@ -462,7 +467,7 @@ async function doPrint(){
     const r = await fetch("/api/print", {method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({pdf: bytesToB64(buf), printer: detected.printer,
         copies: 1, media: detected.media, mediatype: detected.mediatype,
-        mediatype_name: "MediaType", quality: true, fit: true, title: makeTitle(),
+        mediatype_name: "MediaType", quality: true, fit: false, title: makeTitle(),  /* PDF=打印机原尺寸，禁止 CUPS 再缩放 */
         meta: {paper: {w: PAPER.w, h: PAPER.h, mode: "6寸满幅"},
           photos: S.photos.map(p=>({name: p.name,
             w: p.img.naturalWidth || p.img.width, h: p.img.naturalHeight || p.img.height,
