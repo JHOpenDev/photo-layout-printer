@@ -37,11 +37,13 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
 #qBtn{flex:1 1 auto;width:auto;min-width:0;white-space:nowrap;padding:9px;font-size:13px;display:flex;align-items:center;justify-content:center}
 .btn.red{background:#fff;border:1px solid #fecaca;color:#dc2626;font-size:14px;font-weight:500;padding:10px}
 #status{font-size:12.5px;margin-top:10px;min-height:18px;color:var(--sub);word-break:break-all}
+#status:empty{display:none}
 #status.ok{color:var(--ok)}
 #status.err{color:var(--err)}
-.secHead{display:flex;align-items:baseline;gap:6px;margin-bottom:10px}
-.secHead h2{margin-bottom:0;flex:none}
-#printerInfo{font-size:10.5px;color:var(--sub);text-align:left;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#printerInfo{font-size:10.5px;color:var(--sub);margin-bottom:10px;overflow-wrap:anywhere}
+#connState{white-space:nowrap}
+#connState.ok{color:var(--ok)}
+#connState.err{color:var(--err)}
 #queueBox{margin-top:10px;display:none}
 #queueBox .job{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:7px 0;border-top:1px solid #f0f1f3;color:#374151}
 #queueBox .job .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -70,10 +72,7 @@ canvas{display:block;margin:0 auto;max-width:100%;border-radius:6px}
 </div>
 
 <div class="card">
-  <div class="secHead">
-    <h2>打印</h2>
-    <div id="printerInfo">正在获取打印机…</div>
-  </div>
+  <div id="printerInfo">打印机：<span id="printerName">正在获取…</span> <span id="connState"></span></div>
   <div id="qbar" style="display:flex;gap:8px;margin-top:10px">
     <button class="btn gray" id="qBtn" style="margin:0">📋 待打印任务 0</button>
   </div>
@@ -307,7 +306,7 @@ function render(){
   const dpr = window.devicePixelRatio || 1;
   const pad = 6, labelH = 15, gapY = 12;
   let k = contentW / L.paper.w;
-  let H = L.sheets.length * (L.paper.h*k + labelH + 8) + pad*2 + (L.sheets.length-1)*gapY;
+  let H = pad*2 + labelH + L.sheets.length * L.paper.h*k + (L.sheets.length-1)*(labelH + gapY);
   const maxDev = 3400;
   if (H * dpr > maxDev){ const f = maxDev / (H * dpr); k *= f; H *= f; }
   cv.width = Math.round(contentW*dpr); cv.height = Math.round(H*dpr);
@@ -317,7 +316,7 @@ function render(){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.clearRect(0,0,contentW,H);
   L.sheets.forEach((slots,i)=>{
-    const ox = pad, oy = pad + i*(L.paper.h*k + labelH + gapY);
+    const ox = pad, oy = pad + labelH + i*(L.paper.h*k + labelH + gapY);   // 顶部留出一行标签的高度，第一张的标签才不会被画布上边缘切掉
     ctx.fillStyle = "#8a8f99"; ctx.font = "11px -apple-system"; ctx.textAlign = "left";
     ctx.fillText("第 " + (i+1) + " 张", ox, oy - 4);
     ctx.save();
@@ -425,13 +424,20 @@ let detected = {printer:"", media:"", mediatype:""};
 function setStatus(cls, msg){ const el = $("status"); el.className = cls; el.textContent = msg; }
 const SIZE_PRI = [/^4x6\.fullbleed$/i, /^4x6$/i, /4x6|6x4|10x15|102x152|om4x6/i, /100x150/i];
 const PHOTO_RE = /photo|photographic|gloss|相|照片|光面|premium/i;
+/* 连接状态：跟在打印机名后面显示 */
+function setConn(ok){
+  const el = $("connState");
+  el.className = ok ? "ok" : "err";
+  el.textContent = ok ? "✔ 已连接" : "✕ 未连接";
+}
 async function initPrinter(){
   try{
     const pr = await (await fetch("/api/printers")).json();
     const pick = (pr.printers.find(p=>/hp|惠普/i.test(p.name)) || {}).name ||
                  (pr.printers.some(p=>p.name===pr.default) ? pr.default : (pr.printers[0]||{}).name) || "";
     detected.printer = pick;
-    $("printerInfo").textContent = "打印机：" + (pick ? (pick.length > 26 ? pick.slice(0,26)+"…" : pick) : "未检测到");
+    // 完整显示打印机名（不截断）；下划线后插入零宽空格，名字太长时在下划线处换行，不会整串挤到下一行
+    $("printerName").textContent = pick ? pick.replace(/_/g, "_\u200B") : "未检测到";
     if (!pick){ $("btnPrint").disabled = true; return; }
     const op = await (await fetch("/api/options?printer="+encodeURIComponent(pick))).json();
     const ps = (op.pagesize||{});
@@ -444,10 +450,11 @@ async function initPrinter(){
     else if (/100x150/i.test(detected.media)) PAPER = {w:100, h:150};
     render();
     $("btnPrint").disabled = false;
-    setStatus("ok", "✔ 打印服务已连接");
+    setConn(true);
   }catch(e){
     $("btnPrint").disabled = true;
-    setStatus("err", "⚠️ 打印服务未连接（下载 PDF 仍可用）");
+    $("printerName").textContent = "未检测到";
+    setConn(false);
   }
   loadQueue();
 }
