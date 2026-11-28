@@ -254,7 +254,7 @@ function drawFit(ctx, img, x, y, w, h, rot, fill){
   ctx.restore();
 }
 /* 照片右下角盖拍摄信息（白描边，随内容方向） */
-function drawStamp(ctx, x, y, w, h, rot, exif, k, img){
+function drawStamp(ctx, x, y, w, h, rot, exif, k, img, fill){
   if (!exif) return;
   const parts = [];
   if (exif.place) parts.push(exif.place);
@@ -265,9 +265,12 @@ function drawStamp(ctx, x, y, w, h, rot, exif, k, img){
   ctx.save();
   ctx.translate(x + w/2, y + h/2);
   if (rot) ctx.rotate(Math.PI/2);
-  // 锚定到图像自身的右下角（本地坐标系内），保证文字永远落在照片里
+  // 锚定到图像自身的右下角（本地坐标系内），保证文字永远落在照片里。
+  // 缩放方式必须和 drawFit 一致：完整照片(min)照片比槽位小，若仍按满幅(max)计算，
+  // 锚点会落到照片下方的白边上，时间那行会被相纸边缘裁掉（曾只在照片上看到地点行）。
   const iw = img.naturalWidth||img.width, ih = img.naturalHeight||img.height;
-  const sc = rot ? Math.max(w/ih, h/iw) : Math.max(w/iw, h/ih);
+  const minmax = (fill || S.fill) === "contain" ? Math.min : Math.max;
+  const sc = rot ? minmax(w/ih, h/iw) : minmax(w/iw, h/ih);
   const a = iw*sc, b = ih*sc;                 // 图像在本地坐标系的绘制尺寸
   const pad = 2.5*k;
   const maxLen = Math.max(...parts.map(t => t.length));
@@ -335,7 +338,7 @@ function render(){
     if (s.photo){
       ctx.save(); ctx.beginPath(); ctx.rect(padX, labelH, sw, sh); ctx.clip();
       drawFit(ctx, s.photo.img, padX, labelH, sw, sh, s.rotC, S.fill);
-      if (S.stampInfo) drawStamp(ctx, padX, labelH, sw, sh, s.rotC, s.photo.exif, k, s.photo.img);
+      if (S.stampInfo) drawStamp(ctx, padX, labelH, sw, sh, s.rotC, s.photo.exif, k, s.photo.img, S.fill);
       ctx.restore();
       // 删除入口移到预览照片右上角，选择区不再需要删除按钮
       const del = document.createElement("button");
@@ -374,7 +377,7 @@ function rasterizeSlot(img, wMM, hMM, rot, exif){
   const x = c.getContext("2d");
   x.fillStyle = "#ffffff"; x.fillRect(0, 0, tw, th);
   drawFit(x, img, 0, 0, tw, th, rot, S.fill);
-  if (S.stampInfo) drawStamp(x, 0, 0, tw, th, rot, exif, dpi/25.4, img);
+  if (S.stampInfo) drawStamp(x, 0, 0, tw, th, rot, exif, dpi/25.4, img, S.fill);
   return new Promise(res=>c.toBlob(b=>res(b), "image/jpeg", 0.92));
 }
 async function buildPDFBytes(){
